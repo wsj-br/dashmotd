@@ -73,10 +73,11 @@ sudo ./update.sh
 Optional overrides: `DASHMOTD_REF=main`, `DASHMOTD_REPO=...`, `DASHMOTD_TARBALL=...`
 (same meaning as for `install.sh`). The updater replaces scripts, systemd units,
 and MOTD hooks, then runs collect + render. Site `config` is preserved — if you
-still have an old `PUBLIC_IP_URL`, set it to `https://api64.ipify.org/` (and
-optionally `PUBLIC_IP_V4_URL=https://api.ipify.org/`) so dual-stack hosts show
-`ipv6 / ipv4`. `COLUMNS` was renamed to `GRID_COLUMNS`; an old `COLUMNS=2` line
-is ignored and the grid falls back to 2 columns.
+still have an old `PUBLIC_IP_URL`, set it to `https://api64.ipify.org/` so
+dual-stack hosts can resolve both families (`ipv6 / ipv4`). A leftover
+`PUBLIC_IP_V4_URL` line in site config is ignored. `COLUMNS` was renamed to
+`GRID_COLUMNS`; an old `COLUMNS=2` line is ignored and the grid falls back to
+2 columns.
 
 ### Options
 

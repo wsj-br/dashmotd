@@ -446,6 +446,41 @@ else
     fail "dual-stack public ip display form rejected or mangled"
 fi
 
+# http_get must honor family 4/6 so root collect (Happy Eyeballs often prefers
+# IPv6) still resolves both stacks explicitly.
+section "http_get forces IP family when requested"
+http_bin="$TEST_CACHE/httpbin"
+mkdir -p "$http_bin"
+printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$*" > "'"$TEST_CACHE"'/curl.args"' 'printf "1.2.3.4\n"' \
+    > "$http_bin/curl"
+chmod +x "$http_bin/curl"
+# Stub curl ahead of real tools; omit wget so http_get takes the curl path.
+# shellcheck source=/dev/null
+source "$ROOT/lib/distro.sh"
+got="$(PATH="$http_bin:/usr/bin:/bin" http_get 'https://api.ipify.org/' 4 | tr -d '[:space:]')"
+args="$(cat "$TEST_CACHE/curl.args" 2>/dev/null || true)"
+if [[ "$got" == "1.2.3.4" ]] && [[ " $args " == *" -4 "* ]]; then
+    pass "http_get URL 4 invokes curl -4"
+else
+    fail "http_get URL 4 did not force IPv4 (got='$got' args='$args')"
+fi
+printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$*" > "'"$TEST_CACHE"'/curl6.args"' 'printf "2a01:4b00:ab2e::1002\n"' \
+    > "$http_bin/curl"
+got6="$(PATH="$http_bin:/usr/bin:/bin" http_get 'https://api64.ipify.org/' 6 | tr -d '[:space:]')"
+args6="$(cat "$TEST_CACHE/curl6.args" 2>/dev/null || true)"
+if [[ "$got6" == "2a01:4b00:ab2e::1002" ]] && [[ " $args6 " == *" -6 "* ]]; then
+    pass "http_get URL 6 invokes curl -6"
+else
+    fail "http_get URL 6 did not force IPv6 (got='$got6' args='$args6')"
+fi
+if grep -Eq 'http_get "\$\{PUBLIC_IP_URL\}" 6' "$ROOT/sections/network_info.sh" \
+    && grep -Eq 'http_get "\$\{PUBLIC_IP_URL\}" 4' "$ROOT/sections/network_info.sh"
+then
+    pass "network_info forces both IP families for public IP lookup"
+else
+    fail "network_info does not force both IP families for public IP lookup"
+fi
+
 # Task count is an integer (ps --no-headers)
 section "system info task count"
 sys_out="$TEST_CACHE/sysinfo.out"

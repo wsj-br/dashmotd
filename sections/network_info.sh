@@ -49,15 +49,28 @@ if [[ "$last_update" != "$today" ]]; then
         private_ip="unknown"
     fi
 
-    # Prefer api64 (IPv6 when available); append IPv4 from the v4 endpoint.
-    public_ip="$(http_get "${PUBLIC_IP_URL}" | tr -d '[:space:]')"
-    if ! is_valid_ip "$public_ip"; then
+    # Collect runs as root (systemd); Happy Eyeballs preference differs by uid
+    # (root often gets IPv6 from api64, a regular user often gets IPv4). Always
+    # force both families against the same URL so dual-stack hosts show
+    # "v6 / v4" regardless.
+    local_v6="$(http_get "${PUBLIC_IP_URL}" 6 | tr -d '[:space:]')"
+    local_v4="$(http_get "${PUBLIC_IP_URL}" 4 | tr -d '[:space:]')"
+    v6_ok=0
+    v4_ok=0
+    if is_valid_ip "$local_v6" && is_ipv6 "$local_v6"; then
+        v6_ok=1
+    fi
+    if is_valid_ip "$local_v4" && ! is_ipv6 "$local_v4"; then
+        v4_ok=1
+    fi
+    if (( v6_ok && v4_ok )); then
+        public_ip="${local_v6} / ${local_v4}"
+    elif (( v6_ok )); then
+        public_ip="$local_v6"
+    elif (( v4_ok )); then
+        public_ip="$local_v4"
+    else
         public_ip="unknown"
-    elif is_ipv6 "$public_ip"; then
-        local_v4="$(http_get "${PUBLIC_IP_V4_URL:-https://api.ipify.org/}" | tr -d '[:space:]')"
-        if is_valid_ip "$local_v4" && ! is_ipv6 "$local_v4"; then
-            public_ip="${public_ip} / ${local_v4}"
-        fi
     fi
     {
         echo "last_update=${today}"

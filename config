@@ -37,10 +37,11 @@ POWERON_WARN=3     # years
 LOADCYCLE_WARN=10  # thousands of cycles
 
 # --- network ----------------------------------------------------------------
-# Public IP lookup (cached once per day). api64 returns IPv6 when available;
-# if so, PUBLIC_IP_V4_URL is also queried and both are shown as "v6 / v4".
+# Public IP lookup (cached once per day by root via dashmotd-collect).
+# Queried twice with explicit IP family (-6 and -4) so dual-stack hosts always
+# show "v6 / v4". Without forcing the family, Happy Eyeballs can prefer a
+# different stack for root vs a regular user and hide one address.
 PUBLIC_IP_URL="https://api64.ipify.org/"
-PUBLIC_IP_V4_URL="https://api.ipify.org/"
 
 # --- partitions -------------------------------------------------------------
 # Pipe-separated filesystem types / targets to exclude from df listing

@@ -68,13 +68,23 @@ dashmotd_detect_os() {
     fi
 }
 
-# http_get URL — print body to stdout using curl or wget
+# http_get URL [4|6] — print body to stdout using curl or wget.
+# Optional second arg forces the IP family (-4 / -6) so dual-stack hosts
+# do not reach an "IPv4" endpoint over IPv6 (and vice versa).
 http_get() {
     local url="$1"
+    local family="${2:-}"
+    local -a curl_opts=() wget_opts=()
+    case "$family" in
+        4) curl_opts=(-4); wget_opts=(-4) ;;
+        6) curl_opts=(-6); wget_opts=(-6) ;;
+        "") ;;
+        *) ;;
+    esac
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --max-time 5 "$url" 2>/dev/null || true
+        curl -fsSL --max-time 5 "${curl_opts[@]}" "$url" 2>/dev/null || true
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO - --timeout=5 "$url" 2>/dev/null || true
+        wget -qO - --timeout=5 "${wget_opts[@]}" "$url" 2>/dev/null || true
     fi
 }
 
