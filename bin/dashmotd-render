@@ -17,6 +17,15 @@ export DASHMOTD_CACHE="${DASHMOTD_CACHE:-$ROOT/cache}"
 # Cache is normally root-owned (/opt/dashmotd); login render runs as the user.
 mkdir -p "$DASHMOTD_CACHE" 2>/dev/null || true
 
+# Auto hooks (profile.d / bashrc) set DASHMOTD_AUTO=1 so nested shells and
+# sudo elevation do not re-print after the first display on this tty/session.
+# pam_motd claims in 50-dashmotd before calling us; explicit CLI previews omit AUTO.
+if [[ "${DASHMOTD_AUTO:-}" == "1" ]]; then
+    # shellcheck source=/dev/null
+    source "$ROOT/lib/once.sh"
+    dashmotd_once_should_display || exit 0
+fi
+
 # shellcheck source=/dev/null
 source "$ROOT/config"
 # shellcheck source=/dev/null

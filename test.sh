@@ -54,6 +54,7 @@ for path in \
     lib/cpu.sh \
     lib/distro.sh \
     lib/layout.sh \
+    lib/once.sh \
     lib/site_config.sh \
     lib/users.sh \
     share/figlet/mono9.tlf \
@@ -685,38 +686,75 @@ else
     fail "dashmotd_remove_user_hook left ~/.bashrc.d/21-dashmotd.sh"
 fi
 
-# Hook body guards non-interactive shells
+# Hook body: login shells mark SHOWN; non-login render once with AUTO
 hook_body="$(_dashmotd_hook_body)"
-if [[ "$hook_body" == *'$- == *i*'* ]] && [[ "$hook_body" == *'login_shell'* ]]; then
-    pass "hook body guards interactive non-login shells"
-else
-    fail "hook body missing interactivity / login_shell guards"
-fi
-
-# profile.d snippet includes interactive guard
-profile_snippet='# dashmotd — render dashboard (live + collected cache) on interactive login shells
-case $- in
-    *i*) ;;
-    *) return 0 ;;
-esac
-if [ -x /opt/dashmotd/bin/dashmotd-render ]; then
-    /opt/dashmotd/bin/dashmotd-render
-fi
-'
-if [[ "$profile_snippet" == *'case $- in'* ]]; then
-    pass "profile.d template guards interactive shells"
-else
-    fail "profile.d template missing interactive guard"
-fi
-
-# 50-dashmotd contains the tty probe
-if grep -Fq '/dev/tty' "$ROOT/update-motd.d/50-dashmotd" \
-    && grep -Fq 'DASHMOTD_FORCE_TTY' "$ROOT/update-motd.d/50-dashmotd"
+if [[ "$hook_body" == *'$- == *i*'* ]] \
+    && [[ "$hook_body" == *'login_shell'* ]] \
+    && [[ "$hook_body" == *'DASHMOTD_SHOWN'* ]] \
+    && [[ "$hook_body" == *'DASHMOTD_AUTO=1'* ]]
 then
-    pass "50-dashmotd has controlling-tty interactivity probe"
+    pass "hook body marks SHOWN and uses DASHMOTD_AUTO for non-login shells"
 else
-    fail "50-dashmotd missing controlling-tty probe"
+    fail "hook body missing SHOWN / AUTO / login_shell guards"
 fi
+
+# profile.d snippet includes interactive + once guards
+if grep -Fq 'DASHMOTD_AUTO=1' "$ROOT/install.sh" \
+    && grep -Fq 'DASHMOTD_SHOWN' "$ROOT/install.sh" \
+    && grep -Fq 'case $- in' "$ROOT/install.sh"
+then
+    pass "profile.d template guards interactive shells and once-display"
+else
+    fail "profile.d template missing interactive / once-display guards"
+fi
+
+# 50-dashmotd contains the tty probe and once-guard
+if grep -Fq '/dev/tty' "$ROOT/update-motd.d/50-dashmotd" \
+    && grep -Fq 'DASHMOTD_FORCE_TTY' "$ROOT/update-motd.d/50-dashmotd" \
+    && grep -Fq 'once.sh' "$ROOT/update-motd.d/50-dashmotd"
+then
+    pass "50-dashmotd has controlling-tty probe and once-guard"
+else
+    fail "50-dashmotd missing controlling-tty probe or once-guard"
+fi
+
+# once.sh: second claim on same tty/session skips; FORCE bypasses
+section "once-per-session display guard"
+# shellcheck source=/dev/null
+source "$ROOT/lib/once.sh"
+ONCE_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/dashmotd-once.XXXXXX")"
+export DASHMOTD_ONCE_DIR="$ONCE_FIXTURE"
+export DASHMOTD_ONCE_TTY=/dev/pts/dashmotd-test
+export DASHMOTD_ONCE_SID=424242
+unset DASHMOTD_SHOWN DASHMOTD_FORCE DASHMOTD_FORCE_TTY SUDO_USER SUDO_UID || true
+if dashmotd_once_should_display && ! dashmotd_once_should_display; then
+    pass "dashmotd_once_should_display claims once then skips"
+else
+    fail "dashmotd_once_should_display did not skip on second claim"
+fi
+unset DASHMOTD_SHOWN || true
+export DASHMOTD_SHOWN=1
+if ! dashmotd_once_should_display; then
+    pass "dashmotd_once_should_display skips when DASHMOTD_SHOWN is set"
+else
+    fail "dashmotd_once_should_display ignored DASHMOTD_SHOWN"
+fi
+unset DASHMOTD_SHOWN || true
+export DASHMOTD_FORCE=1
+if dashmotd_once_should_display; then
+    pass "dashmotd_once_should_display allows DASHMOTD_FORCE bypass"
+else
+    fail "dashmotd_once_should_display blocked DASHMOTD_FORCE"
+fi
+unset DASHMOTD_FORCE || true
+export SUDO_USER=someone
+if ! dashmotd_once_should_display; then
+    pass "dashmotd_once_should_display skips when SUDO_USER is set"
+else
+    fail "dashmotd_once_should_display ignored SUDO_USER"
+fi
+unset DASHMOTD_ONCE_DIR DASHMOTD_ONCE_TTY DASHMOTD_ONCE_SID SUDO_USER || true
+rm -rf "$ONCE_FIXTURE"
 
 rm -rf "$USERS_FIXTURE"
 

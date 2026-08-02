@@ -216,12 +216,18 @@ if [[ -d /etc/profile.d && -e /etc/profile.d/zzz-dashmotd.sh ]]; then
     log "refreshing /etc/profile.d/zzz-dashmotd.sh"
     cat > /etc/profile.d/zzz-dashmotd.sh <<'PROFILE'
 # dashmotd — render dashboard (live + collected cache) on interactive login shells
+# DASHMOTD_AUTO=1: show at most once per tty/session (skip sudo -i / nested shells)
 case $- in
     *i*) ;;
     *) return 0 ;;
 esac
+if [ -n "${DASHMOTD_SHOWN:-}" ]; then
+    return 0
+fi
 if [ -x /opt/dashmotd/bin/dashmotd-render ]; then
-    /opt/dashmotd/bin/dashmotd-render
+    DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+    DASHMOTD_SHOWN=1
+    export DASHMOTD_SHOWN
 fi
 PROFILE
     chmod 0644 /etc/profile.d/zzz-dashmotd.sh

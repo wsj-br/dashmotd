@@ -9,6 +9,9 @@
 # Skip the live render when there is no controlling terminal — those sessions
 # discard MOTD output anyway, and rendering (e.g. docker ps) is wasted work.
 #
+# Also skip when this tty/session already showed the dashboard (nested shells,
+# sudo su -) — see lib/once.sh.
+#
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 # pam_motd runs this via `env -i` (no LANG). Force UTF-8 for °C etc.
@@ -20,12 +23,6 @@ STATIC="${DASHMOTD_STATIC_MOTD:-/etc/motd.dashmotd.bak}"
 RENDER="${DASHMOTD_RENDER:-/opt/dashmotd/bin/dashmotd-render}"
 FALLBACK="${DASHMOTD_MOTD:-/opt/dashmotd/cache/motd}"
 
-# Skip preamble when install used --no-static-motd (marker absent).
-if [ -e /opt/dashmotd/show-static-motd ] && [ -s "$STATIC" ]; then
-    cat "$STATIC"
-    echo
-fi
-
 # Best-effort interactivity probe: interactive ssh/console sessions have a
 # controlling tty by the time pam_motd runs; non-interactive ones typically do not.
 # DASHMOTD_FORCE_TTY=1 bypasses the probe (used by test.sh / manual previews).
@@ -33,6 +30,28 @@ if [ -z "${DASHMOTD_FORCE_TTY:-}" ]; then
     if ! (exec 3<>/dev/tty) 2>/dev/null; then
         exit 0
     fi
+fi
+
+# Resolve lib/once.sh next to the render binary (or DASHMOTD_ONCE_LIB override).
+ONCE_LIB="${DASHMOTD_ONCE_LIB:-}"
+if [ -z "$ONCE_LIB" ] && [ -n "$RENDER" ]; then
+    ONCE_LIB="$(dirname "$RENDER")/../lib/once.sh"
+fi
+if [ -z "$ONCE_LIB" ]; then
+    ONCE_LIB=/opt/dashmotd/lib/once.sh
+fi
+if [ -r "$ONCE_LIB" ]; then
+    # shellcheck source=/dev/null
+    . "$ONCE_LIB"
+    if ! dashmotd_once_should_display; then
+        exit 0
+    fi
+fi
+
+# Skip preamble when install used --no-static-motd (marker absent).
+if [ -e /opt/dashmotd/show-static-motd ] && [ -s "$STATIC" ]; then
+    cat "$STATIC"
+    echo
 fi
 
 if [ -x "$RENDER" ]; then

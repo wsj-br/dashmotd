@@ -13,11 +13,16 @@ DASHMOTD_HOOK_END='# <<< dashmotd hook <<<'
 # Body of the non-login interactive shell hook (no markers).
 _dashmotd_hook_body() {
     cat <<'HOOK'
-# dashmotd — render dashboard in non-login interactive shells only
-# (login shells already get it via pam_motd / update-motd.d / profile.d)
-if [[ $- == *i* ]] && ! shopt -q login_shell; then
-    if [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
-        /opt/dashmotd/bin/dashmotd-render
+# dashmotd — show dashboard once per interactive session
+# Login shells: pam_motd / profile.d already displayed; just mark SHOWN so
+# nested shells (chezmoi cd, bash) inherit the flag and skip.
+# Non-login shells: render at most once per tty/session (DASHMOTD_AUTO=1).
+if [[ $- == *i* ]]; then
+    if shopt -q login_shell; then
+        export DASHMOTD_SHOWN=1
+    elif [[ -z "${DASHMOTD_SHOWN:-}" ]] && [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
+        DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+        export DASHMOTD_SHOWN=1
     fi
 fi
 HOOK

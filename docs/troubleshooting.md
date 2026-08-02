@@ -86,7 +86,9 @@ If a collected section is empty:
 ## Why is the dashboard rendered twice or not displaying in tmux / subshells?
 
 - **Double rendering:** if upgrading from older versions, check for leftover manual hooks in `~/.bashrc` or `~/.bashrc.d/21-dashmotd.sh`. `update.sh` automatically removes legacy per-user hooks in favor of the system-wide hook.
-- **Subshell rendering:** `dashmotd` hooks into system-wide interactive non-login shells (`/etc/bash.bashrc` on Debian/Ubuntu/Arch/SUSE, `/etc/bashrc` on RHEL/Fedora). Ensure your user `~/.bashrc` sources the system bashrc file if using customized shell configs.
+- **`sudo su -` / `chezmoi cd` / nested `bash`:** these should not show the dashboard again. Current releases mark the session (`DASHMOTD_SHOWN` + a per-tty stamp in `/tmp/dashmotd-once`) and skip elevation via `su`. Update with `sudo /opt/dashmotd/update.sh` if you still see repeats.
+- **Subshell rendering:** `dashmotd` hooks into system-wide interactive shells (`/etc/bash.bashrc` on Debian/Ubuntu/Arch/SUSE, `/etc/bashrc` on RHEL/Fedora). Ensure your user `~/.bashrc` sources the system bashrc file if using customized shell configs. New tmux/byobu panes still get one display (new pts); nested shells in the same pane do not.
+- **Force a preview:** `/opt/dashmotd/bin/dashmotd-render` or `DASHMOTD_FORCE=1 DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render`
 
 ## Disk health (`smartctl`) needs root
 

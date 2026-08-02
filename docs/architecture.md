@@ -44,15 +44,26 @@ Render (every login / interactive shell):
 
 ```bash
 # >>> dashmotd hook >>>
-# dashmotd — render dashboard in non-login interactive shells only
-# (login shells already get it via pam_motd / update-motd.d / profile.d)
-if [[ $- == *i* ]] && ! shopt -q login_shell; then
-    if [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
-        /opt/dashmotd/bin/dashmotd-render
+# dashmotd — show dashboard once per interactive session
+# Login shells: pam_motd / profile.d already displayed; just mark SHOWN so
+# nested shells (chezmoi cd, bash) inherit the flag and skip.
+# Non-login shells: render at most once per tty/session (DASHMOTD_AUTO=1).
+if [[ $- == *i* ]]; then
+    if shopt -q login_shell; then
+        export DASHMOTD_SHOWN=1
+    elif [[ -z "${DASHMOTD_SHOWN:-}" ]] && [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
+        DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+        export DASHMOTD_SHOWN=1
     fi
 fi
 # <<< dashmotd hook <<<
 ```
+
+Auto display paths also use `lib/once.sh`: at most one render per controlling
+tty + kernel session, and skips `sudo`/`su` elevation. That prevents a second
+dashboard on `sudo su -` or `chezmoi cd` while still showing it in new tmux
+panes (new pts). Bypass with `DASHMOTD_FORCE=1` or a direct
+`/opt/dashmotd/bin/dashmotd-render` (no `DASHMOTD_AUTO`).
 
 > **Notes:** On Debian-family systems `/etc/bash.bashrc` is a dpkg conffile;
 > a bash package upgrade may ask whether to keep your local version — keep
