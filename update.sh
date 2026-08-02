@@ -187,6 +187,10 @@ dashmotd_install_site_config "$SRC/config" "$PREFIX"
 
 install -m 0644 "$SRC/LICENSE" "$PREFIX/LICENSE" 2>/dev/null || true
 install -m 0644 "$SRC/README.md" "$PREFIX/README.md" 2>/dev/null || true
+if [[ -d "$SRC/docs" ]]; then
+    mkdir -p "$PREFIX/docs"
+    install -m 0644 "$SRC"/docs/*.md "$PREFIX/docs/" 2>/dev/null || true
+fi
 install -m 0755 "$SRC"/bin/* "$PREFIX/bin/"
 install -m 0644 "$SRC"/lib/*.sh "$PREFIX/lib/"
 chmod 0755 "$PREFIX/lib/cpu.sh"
