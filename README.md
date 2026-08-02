@@ -33,14 +33,18 @@ sudo pacman -S --needed smartmontools openssl wget curl figlet pacman-contrib
 ## Quick install
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/wsj-br/dashmotd@main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/wsj-br/dashmotd/main/install.sh | sudo bash
 ```
 
 The installer is self-bootstrapping: when piped through `curl` it downloads
 the project tarball, installs into `/opt/dashmotd`, wires up systemd +
 `update-motd.d`, collects the first cache, and renders a preview. Pipe into
-`sudo bash` (root is required; a non-root pipe cannot re-exec itself). 
+`sudo bash` (root is required; a non-root pipe cannot re-exec itself).
 
+> **Development tip:** GitHub’s raw CDN can lag ~5 minutes after a push. If a
+> just-published `install.sh` still looks stale, use a clone/`DASHMOTD_TARBALL`,
+> or temporarily:
+> `curl -fsSL https://cdn.jsdelivr.net/gh/wsj-br/dashmotd@main/install.sh | sudo bash`
 
 Or install from a local tarball / clone:
 
