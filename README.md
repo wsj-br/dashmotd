@@ -33,7 +33,7 @@ sudo pacman -S --needed smartmontools openssl wget curl figlet pacman-contrib
 ## Quick install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wsj-br/dashmotd/main/install.sh | sudo bash
+curl -fsSL https://cdn.jsdelivr.net/gh/wsj-br/dashmotd@main/install.sh | sudo bash
 ```
 
 The installer is self-bootstrapping: when piped through `curl` it downloads
