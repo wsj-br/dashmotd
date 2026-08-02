@@ -84,6 +84,7 @@ fi
 {
     [[ -s "$banner_file" ]] && cat "$banner_file"
     printf '%s\n' "$merged"
+    printf '\n'
 } | {
     # Always print to stdout for login/MOTD. Refresh cache/motd only when writable
     # (root/timer/install); never fail the display on Permission denied.
