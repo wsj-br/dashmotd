@@ -13,7 +13,8 @@ export LC_ALL="${LC_ALL:-C.UTF-8}"
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export DASHMOTD_ROOT="$ROOT"
 export DASHMOTD_CACHE="${DASHMOTD_CACHE:-$ROOT/cache}"
-mkdir -p "$DASHMOTD_CACHE"
+# Cache is normally root-owned (/opt/dashmotd); login render runs as the user.
+mkdir -p "$DASHMOTD_CACHE" 2>/dev/null || true
 
 # shellcheck source=/dev/null
 source "$ROOT/config"
@@ -24,7 +25,8 @@ source "$ROOT/lib/layout.sh"
 
 banner_file="$DASHMOTD_CACHE/banner"
 if [[ ! -s "$banner_file" ]]; then
-    "$ROOT/bin/dashmotd-banner" >/dev/null
+    # May fail as non-root; sections still render without a banner.
+    "$ROOT/bin/dashmotd-banner" >/dev/null 2>&1 || true
 fi
 
 mapfile -t layout_rows < <(dashmotd_layout_rows)
@@ -80,6 +82,14 @@ else
 fi
 
 {
-    cat "$banner_file"
+    [[ -s "$banner_file" ]] && cat "$banner_file"
     printf '%s\n' "$merged"
-} | tee "$DASHMOTD_CACHE/motd"
+} | {
+    # Always print to stdout for login/MOTD. Refresh cache/motd only when writable
+    # (root/timer/install); never fail the display on Permission denied.
+    if [[ -w "$DASHMOTD_CACHE/motd" ]] || { [[ ! -e "$DASHMOTD_CACHE/motd" ]] && [[ -w "$DASHMOTD_CACHE" ]]; }; then
+        tee "$DASHMOTD_CACHE/motd"
+    else
+        cat
+    fi
+}
