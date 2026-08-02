@@ -96,10 +96,10 @@ From a clone (no install required):
 Uses an isolated temp cache; does not modify `/opt/dashmotd`.
 
 > **Note:** Disk health (`smartctl`) needs root to read SMART attributes.
-> A non-root `./test.sh` still passes, but the disks section shows placeholders
-> (`.` / `x`) until collect has run as root. Use `sudo ./test.sh` for a full
-> preview, or rely on the installed systemd unit which runs `dashmotd-collect`
-> as root.
+> Disks with no usable SMART data (e.g. unknown USB bridges) are omitted from
+> the list. A non-root `./test.sh` still passes, but the disks section may be
+> empty until collect has run as root. Use `sudo ./test.sh` for a full preview,
+> or rely on the installed systemd unit which runs `dashmotd-collect` as root.
 
 ## Preview
 

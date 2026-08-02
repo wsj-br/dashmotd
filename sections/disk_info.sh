@@ -34,34 +34,14 @@ while read -r disk; do
         /Power On Hours:/ { if (match($0, /[0-9]+/)) { print substr($0, RSTART, RLENGTH); exit } }
         $2 == "Power_On_Hours" { print $NF; exit }
     ' "$smart_tmp" | tr -cd '0-9')"
-    if [[ -n "$age_h" ]]; then
-        age_y=$(( age_h / 24 / 365 ))
-        age="$(color_below "$age_y" "$POWERON_WARN" 'y')"
-    else
-        age='.'
-    fi
-
     temp="$(awk '
         /^Temperature:/ { if (match($0, /[0-9]+/)) { print substr($0, RSTART, RLENGTH); exit } }
         $2 == "Temperature_Celsius" || $2 == "Airflow_Temperature_Cel" { print $NF; exit }
     ' "$smart_tmp" | tr -cd '0-9')"
-    if [[ -n "$temp" ]]; then
-        temp="$(color_below "$temp" "$TEMP_WARN" '°C')"
-    else
-        temp='.'
-    fi
-
     cycle="$(awk '
         /Power Cycles:/ { if (match($0, /[0-9]+/)) { print substr($0, RSTART, RLENGTH); exit } }
         $2 == "Power_Cycle_Count" || $2 == "Load_Cycle_Count" { print $NF; exit }
     ' "$smart_tmp" | tr -cd '0-9')"
-    if [[ -n "$cycle" ]]; then
-        cycle_k=$(( cycle / 1000 ))
-        cycle="$(color_below "$cycle_k" "$LOADCYCLE_WARN" 'k')"
-    else
-        cycle='.'
-    fi
-
     # Prefer available-spare style attrs over reallocated-sector count.
     spare="$(awk '
         /Available Spare:/ {
@@ -74,9 +54,41 @@ while read -r disk; do
             else if (fallback != "") print fallback
         }
     ' "$smart_tmp")"
+
+    healthy=0
+    if grep -qiE 'test result: PASSED|Health Status:\s*OK' "$smart_tmp"; then
+        healthy=1
+    fi
+
+    # Omit disks with no usable SMART data (e.g. unknown USB bridges).
+    if (( ! healthy )) && [[ -z "$age_h" && -z "$temp" && -z "$cycle" && -z "$spare" ]]; then
+        rm -f "$smart_tmp"
+        continue
+    fi
+
+    if [[ -n "$age_h" ]]; then
+        age_y=$(( age_h / 24 / 365 ))
+        age="$(color_below "$age_y" "$POWERON_WARN" 'y')"
+    else
+        age='.'
+    fi
+
+    if [[ -n "$temp" ]]; then
+        temp="$(color_below "$temp" "$TEMP_WARN" '°C')"
+    else
+        temp='.'
+    fi
+
+    if [[ -n "$cycle" ]]; then
+        cycle_k=$(( cycle / 1000 ))
+        cycle="$(color_below "$cycle_k" "$LOADCYCLE_WARN" 'k')"
+    else
+        cycle='.'
+    fi
+
     spare="${spare:-.}"
 
-    if grep -qiE 'test result: PASSED|Health Status:\s*OK' "$smart_tmp"; then
+    if (( healthy )); then
         state="${bgreen}o${reset}"
     else
         state="${bred}x${reset}"
