@@ -81,9 +81,7 @@ else
     done
     # ASCII unit separator — never appears in printable MOTD text (unlike @).
     us=$'\x1f'
-    # U+2502 (box drawings) — terminals like Ghostty/Kitty draw this as a
-    # full-cell sprite so stacked rows form one continuous line. U+23D0 does not.
-    merged="$(paste -d "$us" "${paste_args[@]}" | column -ts "$us" -o "${gray}  │  ${reset}")"
+    merged="$(paste -d "$us" "${paste_args[@]}" | column -ts "$us" -o "    ")"
 fi
 
 {
