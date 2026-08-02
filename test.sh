@@ -53,6 +53,7 @@ for path in \
     lib/cpu.sh \
     lib/distro.sh \
     lib/layout.sh \
+    lib/site_config.sh \
     lib/users.sh \
     update-motd.d/50-dashmotd \
     systemd/dashmotd.service \
@@ -673,6 +674,70 @@ else
 fi
 
 rm -rf "$USERS_FIXTURE"
+
+section "site_config.sh conflict handling"
+log()  { :; }
+warn() { :; }
+# shellcheck source=/dev/null
+source "$ROOT/lib/site_config.sh"
+
+CFG_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/dashmotd-site-config.XXXXXX")"
+packaged="$CFG_FIXTURE/packaged"
+prefix_eq="$CFG_FIXTURE/eq"
+prefix_keep="$CFG_FIXTURE/keep"
+prefix_replace="$CFG_FIXTURE/replace"
+
+printf 'PACKAGED=1\n' > "$packaged"
+
+# Equal: keep site file, drop stale config.new
+mkdir -p "$prefix_eq"
+printf 'PACKAGED=1\n' > "$prefix_eq/config"
+printf 'STALE=1\n' > "$prefix_eq/config.new"
+DASHMOTD_CONFIG_ACTION=keep dashmotd_install_site_config "$packaged" "$prefix_eq"
+if cmp -s "$prefix_eq/config" "$packaged" && [[ ! -e "$prefix_eq/config.new" ]]; then
+    pass "equal configs leave site file and remove stale config.new"
+else
+    fail "equal configs did not clean up as expected"
+fi
+
+# Differ + keep: site unchanged, config.new written
+mkdir -p "$prefix_keep"
+printf 'SITE=keep-me\n' > "$prefix_keep/config"
+DASHMOTD_CONFIG_ACTION=keep dashmotd_install_site_config "$packaged" "$prefix_keep"
+if [[ "$(cat "$prefix_keep/config")" == "SITE=keep-me" ]] \
+    && cmp -s "$prefix_keep/config.new" "$packaged"
+then
+    pass "DASHMOTD_CONFIG_ACTION=keep preserves site config and writes config.new"
+else
+    fail "DASHMOTD_CONFIG_ACTION=keep did not preserve site / write config.new"
+fi
+
+# Differ + replace: new installed, config.old present, no config.new
+mkdir -p "$prefix_replace"
+printf 'SITE=old\n' > "$prefix_replace/config"
+printf 'STALE=1\n' > "$prefix_replace/config.new"
+DASHMOTD_CONFIG_ACTION=replace dashmotd_install_site_config "$packaged" "$prefix_replace"
+if cmp -s "$prefix_replace/config" "$packaged" \
+    && [[ "$(cat "$prefix_replace/config.old")" == "SITE=old" ]] \
+    && [[ ! -e "$prefix_replace/config.new" ]]
+then
+    pass "DASHMOTD_CONFIG_ACTION=replace installs packaged config and saves config.old"
+else
+    fail "DASHMOTD_CONFIG_ACTION=replace did not replace / save old config"
+fi
+
+# Missing site config: install packaged
+prefix_fresh="$CFG_FIXTURE/fresh"
+mkdir -p "$prefix_fresh"
+unset DASHMOTD_CONFIG_ACTION
+dashmotd_install_site_config "$packaged" "$prefix_fresh"
+if cmp -s "$prefix_fresh/config" "$packaged"; then
+    pass "missing site config installs packaged defaults"
+else
+    fail "missing site config did not install packaged defaults"
+fi
+
+rm -rf "$CFG_FIXTURE"
 
 # --- summary -----------------------------------------------------------------
 section "summary"

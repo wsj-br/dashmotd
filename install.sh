@@ -8,6 +8,7 @@
 #   DASHMOTD_REPO     GitHub repo URL (default: https://github.com/wsj-br/dashmotd)
 #   DASHMOTD_REF      git ref / branch / tag for tarball (default: main)
 #   DASHMOTD_TARBALL  local .tar.gz path or URL (overrides DASHMOTD_REPO)
+#   DASHMOTD_CONFIG_ACTION  keep|replace — force site-config conflict choice (default: prompt / keep)
 #
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
@@ -38,9 +39,10 @@ Options:
   -h, --help          Show this help
 
 Environment:
-  DASHMOTD_REPO       GitHub repo to fetch when bootstrapping (curl | bash)
-  DASHMOTD_REF        Branch/tag/ref for the tarball (default: main)
-  DASHMOTD_TARBALL    Local path or URL of a release tarball (overrides repo)
+  DASHMOTD_REPO           GitHub repo to fetch when bootstrapping (curl | bash)
+  DASHMOTD_REF            Branch/tag/ref for the tarball (default: main)
+  DASHMOTD_TARBALL        Local path or URL of a release tarball (overrides repo)
+  DASHMOTD_CONFIG_ACTION  keep|replace — force config conflict choice (skip prompt)
 EOF
 }
 
@@ -66,7 +68,7 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     fi
     extra_args=()
     (( ! SHOW_STATIC )) && extra_args+=(--no-static-motd)
-    exec sudo --preserve-env=DASHMOTD_REPO,DASHMOTD_REF,DASHMOTD_TARBALL,SUDO_USER \
+    exec sudo --preserve-env=DASHMOTD_REPO,DASHMOTD_REF,DASHMOTD_TARBALL,DASHMOTD_CONFIG_ACTION,SUDO_USER \
         bash "$self" "${extra_args[@]}"
 fi
 
@@ -192,7 +194,9 @@ fi
 # --- install files -----------------------------------------------------------
 log "installing to $PREFIX"
 mkdir -p "$PREFIX"/{bin,lib,sections,cache,update-motd.d,systemd}
-install -m 0644 "$SRC/config" "$PREFIX/config"
+# shellcheck source=/dev/null
+source "$SRC/lib/site_config.sh"
+dashmotd_install_site_config "$SRC/config" "$PREFIX"
 install -m 0644 "$SRC/LICENSE" "$PREFIX/LICENSE" 2>/dev/null || true
 install -m 0644 "$SRC/README.md" "$PREFIX/README.md" 2>/dev/null || true
 install -m 0755 "$SRC"/bin/* "$PREFIX/bin/"

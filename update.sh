@@ -2,16 +2,21 @@
 # dashmotd updater — refresh an existing /opt/dashmotd install.
 # Usage:
 #   sudo /opt/dashmotd/update.sh
+#   sudo /opt/dashmotd/update.sh --force-new-config
+#   sudo /opt/dashmotd/update.sh -f
 #   sudo ./update.sh                  # from a git clone
 #   DASHMOTD_REF=main sudo ./update.sh
 #
-# Preserves /opt/dashmotd/config and cache/. Replaces scripts, units, and hooks.
+# Preserves cache/. Site config is kept by default; when it differs from the
+# packaged file, prompts (apt-style) or honors DASHMOTD_CONFIG_ACTION /
+# --force-new-config. Replaces scripts, units, and hooks.
 #
 # Environment:
 #   DASHMOTD_REPO     GitHub repo URL (default: https://github.com/wsj-br/dashmotd)
 #   DASHMOTD_REF      git ref / branch / tag / SHA (default: main)
 #   DASHMOTD_TARBALL  local .tar.gz path or URL (overrides DASHMOTD_REPO)
 #   DASHMOTD_PREFIX   install prefix (default: /opt/dashmotd)
+#   DASHMOTD_CONFIG_ACTION  keep|replace — force site-config conflict choice
 #
 # Remote updates fetch via the GitHub tarball API (api.github.com/.../tarball/...)
 # so they are not subject to raw.githubusercontent.com CDN lag.
@@ -26,6 +31,7 @@ MOTD_DIR="/etc/update-motd.d"
 
 DASHMOTD_REPO="${DASHMOTD_REPO:-https://github.com/wsj-br/dashmotd}"
 DASHMOTD_REF="${DASHMOTD_REF:-main}"
+FORCE_NEW_CONFIG=0
 
 log()  { printf '[+] %s\n' "$*"; }
 warn() { printf '[!] %s\n' "$*" >&2; }
@@ -35,28 +41,38 @@ usage() {
     cat <<'EOF'
 Usage: update.sh [options]
 
-Refresh an existing dashmotd installation. Keeps config and cache; replaces
-binaries, section scripts, systemd units, and MOTD hooks from upstream (or a
-local clone / tarball).
+Refresh an existing dashmotd installation. Keeps cache; replaces binaries,
+section scripts, systemd units, and MOTD hooks from upstream (or a local clone
+/ tarball). When site config differs from packaged defaults, prompts apt-style
+(default: keep existing).
 
 Options:
+  -f, --force-new-config
+                      Replace site config with the packaged version (saves
+                      previous as config.old; skips the conflict prompt)
   -h, --help          Show this help
 
 Environment:
-  DASHMOTD_REPO       GitHub repo to fetch (default: https://github.com/wsj-br/dashmotd)
-  DASHMOTD_REF        Branch/tag/ref for the tarball (default: main)
-  DASHMOTD_TARBALL    Local path or URL of a .tar.gz (overrides repo)
-  DASHMOTD_PREFIX     Install prefix (default: /opt/dashmotd)
+  DASHMOTD_REPO           GitHub repo to fetch (default: https://github.com/wsj-br/dashmotd)
+  DASHMOTD_REF            Branch/tag/ref for the tarball (default: main)
+  DASHMOTD_TARBALL        Local path or URL of a .tar.gz (overrides repo)
+  DASHMOTD_PREFIX         Install prefix (default: /opt/dashmotd)
+  DASHMOTD_CONFIG_ACTION  keep|replace — force config conflict choice (skip prompt)
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -f|--force-new-config) FORCE_NEW_CONFIG=1 ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown option: $1" ;;
     esac
     shift
 done
+
+if (( FORCE_NEW_CONFIG )); then
+    DASHMOTD_CONFIG_ACTION=replace
+fi
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     self="${BASH_SOURCE[0]:-}"
@@ -64,8 +80,10 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
         die "root privileges required — re-run as: sudo $0"
     fi
     command -v sudo >/dev/null 2>&1 || die "root privileges required"
-    exec sudo --preserve-env=DASHMOTD_REPO,DASHMOTD_REF,DASHMOTD_TARBALL,DASHMOTD_PREFIX,SUDO_USER \
-        bash "$self"
+    extra_args=()
+    (( FORCE_NEW_CONFIG )) && extra_args+=(--force-new-config)
+    exec sudo --preserve-env=DASHMOTD_REPO,DASHMOTD_REF,DASHMOTD_TARBALL,DASHMOTD_PREFIX,DASHMOTD_CONFIG_ACTION,SUDO_USER \
+        bash "$self" "${extra_args[@]}"
 fi
 
 [[ -d "$PREFIX" && -x "$PREFIX/bin/dashmotd-render" ]] \
@@ -160,16 +178,12 @@ log "updating $PREFIX"
 
 # shellcheck source=/dev/null
 source "$SRC/lib/users.sh"
+# shellcheck source=/dev/null
+source "$SRC/lib/site_config.sh"
 
 mkdir -p "$PREFIX"/{bin,lib,sections,cache,cache/sections,update-motd.d,systemd}
 
-# Preserve site config; only install a default if missing.
-if [[ -f "$PREFIX/config" ]]; then
-    log "keeping existing $PREFIX/config"
-else
-    log "installing default config (none present)"
-    install -m 0644 "$SRC/config" "$PREFIX/config"
-fi
+dashmotd_install_site_config "$SRC/config" "$PREFIX"
 
 install -m 0644 "$SRC/LICENSE" "$PREFIX/LICENSE" 2>/dev/null || true
 install -m 0644 "$SRC/README.md" "$PREFIX/README.md" 2>/dev/null || true
