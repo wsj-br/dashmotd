@@ -1,0 +1,18 @@
+# Runtime cache written by collect/render (may contain host IPs, cert hostnames, etc.)
+cache/*
+!cache/.gitkeep
+
+# Local / editor junk
+*.bak
+*~
+*.swp
+*.swo
+.DS_Store
+
+# Accidental env / secrets (none used by dashmotd, but keep them out)
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+id_ed25519*

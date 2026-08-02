@@ -1,0 +1,11 @@
+[Unit]
+Description=dashmotd hourly collect timer
+
+[Timer]
+OnCalendar=hourly
+OnBootSec=2min
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

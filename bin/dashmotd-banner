@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
+# Generate a hostname banner with figlet -f mono9 into cache/banner.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+CACHE="${DASHMOTD_CACHE:-$ROOT/cache}"
+mkdir -p "$CACHE"
+
+host="$(hostname -s 2>/dev/null || hostname)"
+out="$CACHE/banner"
+
+if command -v figlet >/dev/null 2>&1 && figlet -f mono9 "$host" >/dev/null 2>&1; then
+    figlet -f mono9 "$host" > "$out"
+else
+    {
+        echo
+        echo "  ${host}"
+        echo
+    } > "$out"
+fi
+
+printf '%s\n' "$out"

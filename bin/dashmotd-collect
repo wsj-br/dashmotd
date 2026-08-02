@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
+# Collect slow / privilege-sensitive section data into cache/sections/.
+# Invoked by the hourly timer — never at login.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export DASHMOTD_ROOT="$ROOT"
+export DASHMOTD_CACHE="${DASHMOTD_CACHE:-$ROOT/cache}"
+mkdir -p "$DASHMOTD_CACHE/sections"
+
+# shellcheck source=/dev/null
+source "$ROOT/config"
+# shellcheck source=/dev/null
+source "$ROOT/lib/colors.sh"
+# shellcheck source=/dev/null
+source "$ROOT/lib/layout.sh"
+
+# Stamp when collected (cached) dashboard data was last refreshed.
+LC_ALL=C.UTF-8 date +'%A %d %B, %H:%M:%S' > "$DASHMOTD_CACHE/last_update"
+
+mapfile -t layout_rows < <(dashmotd_layout_rows)
+for row in "${layout_rows[@]}"; do
+    IFS='|' read -r -a cells <<< "$row"
+    for cell in "${cells[@]}"; do
+        name="$(dashmotd_trim "$cell")"
+        [[ -z "$name" ]] && continue
+        if dashmotd_is_live "$name"; then
+            continue
+        fi
+        script="$(dashmotd_resolve_section "$name" || true)"
+        if [[ -z "$script" ]]; then
+            printf 'dashmotd-collect: no script for section %s\n' "$name" >&2
+            continue
+        fi
+        # Run section; empty/failed output still overwrites the cache file so
+        # stale data from a previous successful collect is not kept forever.
+        "$script" > "$DASHMOTD_CACHE/sections/$name" 2>/dev/null || true
+    done
+done

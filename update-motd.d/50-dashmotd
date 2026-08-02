@@ -1,0 +1,12 @@
+#!/bin/sh
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
+# update-motd.d entry: render the dashboard (live + collected cache).
+
+RENDER="${DASHMOTD_RENDER:-/opt/dashmotd/bin/dashmotd-render}"
+FALLBACK="${DASHMOTD_MOTD:-/opt/dashmotd/cache/motd}"
+
+if [ -x "$RENDER" ]; then
+    "$RENDER"
+elif [ -r "$FALLBACK" ]; then
+    cat "$FALLBACK"
+fi

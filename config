@@ -1,0 +1,68 @@
+# dashmotd configuration
+# Shell variables and a LAYOUT grid (columns separated by |).
+
+# Number of columns in the dashboard grid
+COLUMNS=2
+
+# LAYOUT: one row per line, columns separated by |.
+# Cell names must match keys in the sections map below.
+LAYOUT="
+sysinfo    | network
+partitions | disks
+packages   | certs
+docker     | lastupdate
+"
+
+# --- sections ----------------------------------------------------------------
+# Map layout cell names to scripts under sections/
+sysinfo="system_info.sh"
+network="network_info.sh"
+partitions="partition_info.sh"
+disks="disk_info.sh"
+packages="packages_info.sh"
+certs="certificate_info.sh"
+docker="docker_info.sh"
+lastupdate="last_update.sh"
+
+# Layout keys sampled live at every display (never stored by dashmotd-collect).
+# Everything else in LAYOUT is gathered by the hourly collector into cache/sections/.
+LIVE_SECTIONS="sysinfo partitions docker"
+
+# --- thresholds -------------------------------------------------------------
+MEM_WARN=50        # percent
+CPU_WARN=20        # percent
+TEMP_WARN=60       # Celsius
+DISK_WARN=80       # percent
+POWERON_WARN=3     # years
+LOADCYCLE_WARN=10  # thousands of cycles
+
+# --- network ----------------------------------------------------------------
+# Public IP lookup URL (cached once per day)
+PUBLIC_IP_URL="http://ifconfig.io/ip"
+
+# --- partitions -------------------------------------------------------------
+# Pipe-separated filesystem types / targets to exclude from df listing
+PARTITION_FILTER="tmpfs|vfat|overlay|devtmpfs|squashfs"
+
+# --- disks ------------------------------------------------------------------
+# Pipe-separated disk name patterns to exclude (e.g. mmcblk|loop)
+DISK_FILTER="mmcblk|loop|sr"
+
+# --- packages ---------------------------------------------------------------
+# Refresh package-upgradable cache at most once per this many hours
+PKG_CACHE_HOURS=1
+# Package manager: auto | apt | dnf | yum | pacman | zypper
+PKG_MANAGER=auto
+
+# --- certificates -----------------------------------------------------------
+# Space-separated host:port pairs to check (default port 443 if omitted)
+CERT_TARGETS="example.com:443"
+
+# --- docker -----------------------------------------------------------------
+# Pipe-separated container name patterns to exclude
+DOCKER_FILTER="watchtower-runnow"
+# How many container names per output row
+DOCKER_COLUMNS=2
+
+# Sentinel used by lib/common.sh to detect a loaded config
+DASHMOTD_CONFIG_LOADED=1

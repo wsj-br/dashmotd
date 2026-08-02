@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
+# Render the dashmotd dashboard: banner + LAYOUT grid.
+# Live sections (LIVE_SECTIONS) are sampled now; other cells come from
+# cache/sections/ written by dashmotd-collect. Invoked at login / display.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export DASHMOTD_ROOT="$ROOT"
+export DASHMOTD_CACHE="${DASHMOTD_CACHE:-$ROOT/cache}"
+mkdir -p "$DASHMOTD_CACHE"
+
+# shellcheck source=/dev/null
+source "$ROOT/config"
+# shellcheck source=/dev/null
+source "$ROOT/lib/colors.sh"
+# shellcheck source=/dev/null
+source "$ROOT/lib/layout.sh"
+
+banner_file="$DASHMOTD_CACHE/banner"
+if [[ ! -s "$banner_file" ]]; then
+    "$ROOT/bin/dashmotd-banner" >/dev/null
+fi
+
+mapfile -t layout_rows < <(dashmotd_layout_rows)
+
+cols="${COLUMNS:-2}"
+
+declare -a col_text
+for (( c = 1; c <= cols; c++ )); do
+    col_text[$c]=""
+done
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+section_output() {
+    local name="$1" script cache_file
+    script="$(dashmotd_resolve_section "$name" || true)"
+    [[ -z "$script" ]] && return 0
+
+    cache_file="$DASHMOTD_CACHE/sections/$name"
+    if dashmotd_is_live "$name" || [[ ! -r "$cache_file" ]]; then
+        # Live keys always run now; missing cache falls back to a live run
+        # (covers first boot before dashmotd-collect has executed).
+        "$script" 2>/dev/null || true
+    else
+        cat "$cache_file"
+    fi
+}
+
+for row in "${layout_rows[@]}"; do
+    IFS='|' read -r -a cells <<< "$row"
+    for (( c = 1; c <= cols; c++ )); do
+        cell="${cells[$((c - 1))]:-}"
+        name="$(dashmotd_trim "$cell")"
+        [[ -z "$name" ]] && continue
+        col_text[$c]+="$(section_output "$name")"$'\n'
+    done
+done
+
+for (( c = 1; c <= cols; c++ )); do
+    printf '%s' "${col_text[$c]}" > "$tmpdir/col$c"
+done
+
+merged=""
+if (( cols == 1 )); then
+    merged="$(cat "$tmpdir/col1")"
+else
+    paste_args=()
+    for (( c = 1; c <= cols; c++ )); do
+        paste_args+=("$tmpdir/col$c")
+    done
+    merged="$(paste "${paste_args[@]}" | sed 's/\t/@/g' | column -ts '@')"
+fi
+
+{
+    cat "$banner_file"
+    printf '%s\n' "$merged"
+} | tee "$DASHMOTD_CACHE/motd"

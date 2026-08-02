@@ -1,0 +1,11 @@
+[Unit]
+Description=dashmotd data collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dashmotd/bin/dashmotd-collect
+
+[Install]
+WantedBy=multi-user.target
