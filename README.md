@@ -195,6 +195,39 @@ Regenerate the hostname banner (e.g. after a rename):
 sudo /opt/dashmotd/bin/dashmotd-banner
 ```
 
+### Static `/etc/motd` (legal / admin text)
+
+On install, the previous `/etc/motd` is moved aside so pam does not print it
+*after* the dashboard. The backup is shown *before* dashmotd instead.
+
+| Path | Role |
+|---|---|
+| `/etc/motd.dashmotd.bak` | Backup of the original static MOTD |
+| `/etc/motd` | Left empty (pam static MOTD) |
+| `/opt/dashmotd/show-static-motd` | Marker: when present, `50-dashmotd` prints the backup first |
+
+**Edit** the text shown before the dashboard:
+
+```bash
+sudo nano /etc/motd.dashmotd.bak
+# next SSH login picks it up (no re-collect needed)
+```
+
+**Restore** it as the normal static `/etc/motd` again (and stop prepending it):
+
+```bash
+sudo mv /etc/motd.dashmotd.bak /etc/motd
+sudo rm -f /opt/dashmotd/show-static-motd
+```
+
+**Delete** / stop showing the old text (keep dashmotd only):
+
+```bash
+sudo rm -f /etc/motd.dashmotd.bak /opt/dashmotd/show-static-motd
+```
+
+Install with `--no-static-motd` to skip showing the backup from the start ( `/etc/motd` is still blanked).
+
 ## Sections
 
 | Layout key | Script | When | Contents |
