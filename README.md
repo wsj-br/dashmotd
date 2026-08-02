@@ -72,7 +72,11 @@ sudo ./update.sh
 
 Optional overrides: `DASHMOTD_REF=main`, `DASHMOTD_REPO=...`, `DASHMOTD_TARBALL=...`
 (same meaning as for `install.sh`). The updater replaces scripts, systemd units,
-and MOTD hooks, then runs collect + render.
+and MOTD hooks, then runs collect + render. Site `config` is preserved — if you
+still have an old `PUBLIC_IP_URL`, set it to `https://api64.ipify.org/` (and
+optionally `PUBLIC_IP_V4_URL=https://api.ipify.org/`) so dual-stack hosts show
+`ipv6 / ipv4`. `COLUMNS` was renamed to `GRID_COLUMNS`; an old `COLUMNS=2` line
+is ignored and the grid falls back to 2 columns.
 
 ### Options
 
@@ -184,7 +188,7 @@ fi
 Edit `/opt/dashmotd/config` (or `config` in a clone before installing):
 
 ```bash
-COLUMNS=2
+GRID_COLUMNS=2
 LAYOUT="
 sysinfo    | network
 partitions | disks
@@ -267,7 +271,7 @@ Install with `--no-static-motd` to skip showing the backup from the start ( `/et
 | Layout key | Script | When | Contents |
 |---|---|---|---|
 | `sysinfo` | `system_info.sh` | live | Kernel, tasks, CPU %, load, memory %, temperature |
-| `network` | `network_info.sh` | collect | Public IP (daily cache) and private IP |
+| `network` | `network_info.sh` | collect | Public IP (IPv6 + IPv4 when dual-stack; daily cache) and private IP |
 | `partitions` | `partition_info.sh` | live | Usage % plus free/total from `df -h` (e.g. `66%  /  304G free of 917G`) |
 | `disks` | `disk_info.sh` | collect | SMART power-on / temp / cycles / spare (`smartctl`) |
 | `packages` | `packages_info.sh` | collect | Upgradable count via apt/dnf/yum/pacman/zypper + reboot flag |

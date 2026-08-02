@@ -81,11 +81,21 @@ fi
     || die "no dashmotd install found at $PREFIX — run install.sh first"
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-BOOTSTRAP_TMP=""
+
+# Create bootstrap temp in the parent so cleanup survives command substitution.
+BOOTSTRAP_TMP="$(mktemp -d)"
+cleanup() {
+    if [[ -n "${BOOTSTRAP_TMP:-}" && -d "${BOOTSTRAP_TMP:-}" ]]; then
+        rm -rf "$BOOTSTRAP_TMP"
+    fi
+}
+trap cleanup EXIT
 
 # Resolve update source: local git clone, else download tarball.
+# $1 = parent-owned temp dir used when downloading.
 # Never treat the live PREFIX tree as the source (that would be a no-op).
 resolve_source() {
+    local tmp="$1" tarball_url extract_dir repo
     if [[ "$HERE" != "$PREFIX" \
         && -f "$HERE/config" \
         && -d "$HERE/sections" \
@@ -95,9 +105,7 @@ resolve_source() {
         return 0
     fi
 
-    local tmp tarball_url extract_dir repo
-    tmp="$(mktemp -d)"
-    BOOTSTRAP_TMP="$tmp"
+    [[ -n "$tmp" && -d "$tmp" ]] || die "bootstrap temp directory missing"
 
     if [[ -n "${DASHMOTD_TARBALL:-}" ]]; then
         if [[ -f "$DASHMOTD_TARBALL" ]]; then
@@ -132,14 +140,7 @@ resolve_source() {
     printf '%s\n' "$extract_dir"
 }
 
-cleanup() {
-    if [[ -n "${BOOTSTRAP_TMP:-}" && -d "${BOOTSTRAP_TMP:-}" ]]; then
-        rm -rf "$BOOTSTRAP_TMP"
-    fi
-}
-trap cleanup EXIT
-
-SRC="$(resolve_source)"
+SRC="$(resolve_source "$BOOTSTRAP_TMP")"
 log "source tree: $SRC"
 log "updating $PREFIX"
 

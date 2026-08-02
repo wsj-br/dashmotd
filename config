@@ -2,7 +2,7 @@
 # Shell variables and a LAYOUT grid (columns separated by |).
 
 # Number of columns in the dashboard grid
-COLUMNS=2
+GRID_COLUMNS=2
 
 # LAYOUT: one row per line, columns separated by |.
 # Cell names must match keys in the sections map below.
@@ -37,8 +37,10 @@ POWERON_WARN=3     # years
 LOADCYCLE_WARN=10  # thousands of cycles
 
 # --- network ----------------------------------------------------------------
-# Public IP lookup URL (cached once per day)
-PUBLIC_IP_URL="http://ifconfig.io/ip"
+# Public IP lookup (cached once per day). api64 returns IPv6 when available;
+# if so, PUBLIC_IP_V4_URL is also queried and both are shown as "v6 / v4".
+PUBLIC_IP_URL="https://api64.ipify.org/"
+PUBLIC_IP_V4_URL="https://api.ipify.org/"
 
 # --- partitions -------------------------------------------------------------
 # Pipe-separated filesystem types / targets to exclude from df listing

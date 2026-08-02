@@ -7,7 +7,7 @@ set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
 kern="$(uname -r | cut -d. -f1-2)"
-tasks="$(ps --ppid 2 -p 2 --deselect 2>/dev/null | wc -l)"
+tasks="$(ps --no-headers --ppid 2 -p 2 --deselect 2>/dev/null | wc -l)"
 load="$(awk '{print $3}' /proc/loadavg)"
 cpus="$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)"
 mem="$(free -b | awk 'NR==2 {printf "%.0f", 100*$3/$2}')"

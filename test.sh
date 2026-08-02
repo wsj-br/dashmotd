@@ -379,6 +379,138 @@ else
     fail "color_below did not emit ANSI color"
 fi
 
+# dashmotd_cache_get — safe key/value reader (never evaluates as shell)
+# shellcheck source=/dev/null
+source "$ROOT/lib/common.sh"
+kv_file="$TEST_CACHE/kv-test"
+printf 'alpha=one\nbeta=two\n' > "$kv_file"
+if [[ "$(dashmotd_cache_get "$kv_file" alpha)" == "one" ]] \
+    && [[ "$(dashmotd_cache_get "$kv_file" beta)" == "two" ]]
+then
+    pass "dashmotd_cache_get returns expected values"
+else
+    fail "dashmotd_cache_get returned unexpected values"
+fi
+if ! dashmotd_cache_get "$kv_file" missing >/dev/null 2>&1; then
+    pass "dashmotd_cache_get fails cleanly on missing key"
+else
+    fail "dashmotd_cache_get should fail on missing key"
+fi
+
+# Cache-injection resistance: poisoned network cache must not execute shell
+section "cache injection resistance"
+poison_cache="$TEST_CACHE/poison"
+mkdir -p "$poison_cache"
+sentinel="$TEST_CACHE/poison-sentinel"
+rm -f "$sentinel"
+today="$(date +%Y%m%d)"
+{
+    printf 'last_update=%s\n' "$today"
+    printf 'public_ip=1.2.3.4\n'
+    printf 'private_ip=10.0.0.1\n'
+    printf 'touch %s\n' "$sentinel"
+    printf 'evil=$(touch %s)\n' "$sentinel"
+} > "$poison_cache/network"
+set +e
+DASHMOTD_CACHE="$poison_cache" "$ROOT/sections/network_info.sh" \
+    >"$TEST_CACHE/poison-net.out" 2>/dev/null
+set -e
+if [[ ! -e "$sentinel" ]]; then
+    pass "poisoned network cache did not execute shell"
+else
+    fail "poisoned network cache executed shell (sentinel created)"
+fi
+if grep -Fq '1.2.3.4' "$TEST_CACHE/poison-net.out" \
+    && grep -Fq '10.0.0.1' "$TEST_CACHE/poison-net.out"
+then
+    pass "poisoned network cache still yields validated IPs"
+else
+    fail "poisoned network cache did not render validated IPs"
+fi
+
+# Dual-stack public IP display form must pass validation (ipv6 / ipv4)
+dual_cache="$TEST_CACHE/dual"
+mkdir -p "$dual_cache"
+{
+    printf 'last_update=%s\n' "$today"
+    printf 'public_ip=2a01:4b00:ab2e::1002 / 209.35.71.89\n'
+    printf 'private_ip=192.168.1.5\n'
+} > "$dual_cache/network"
+set +e
+DASHMOTD_CACHE="$dual_cache" "$ROOT/sections/network_info.sh" \
+    >"$TEST_CACHE/dual-net.out" 2>/dev/null
+set -e
+if grep -Fq '2a01:4b00:ab2e::1002 / 209.35.71.89' "$TEST_CACHE/dual-net.out"; then
+    pass "dual-stack public ip display form is accepted from cache"
+else
+    fail "dual-stack public ip display form rejected or mangled"
+fi
+
+# Task count is an integer (ps --no-headers)
+section "system info task count"
+sys_out="$TEST_CACHE/sysinfo.out"
+set +e
+"$ROOT/sections/system_info.sh" >"$sys_out" 2>/dev/null
+set -e
+# Strip ANSI, then look for "<digits> tasks"
+task_n="$(sed 's/\x1b\[[0-9;]*m//g' "$sys_out" | grep -oE '[0-9]+[[:space:]]+tasks' | head -n1 | awk '{print $1}')"
+if [[ "$task_n" =~ ^[0-9]+$ ]]; then
+    pass "system info task count is integer ($task_n)"
+else
+    fail "system info task count not parseable as integer"
+fi
+
+# Unit-separator merge: @ in section text must not split columns
+section "merge delimiter (@ safety)"
+us=$'\x1f'
+merge_tmp="$TEST_CACHE/merge"
+mkdir -p "$merge_tmp"
+printf 'user@host.example left\n' > "$merge_tmp/col1"
+printf 'right column\n' > "$merge_tmp/col2"
+merged="$(paste -d "$us" "$merge_tmp/col1" "$merge_tmp/col2" | column -ts "$us")"
+if [[ "$merged" == *'user@host.example'* ]] \
+    && [[ "$merged" == *'right column'* ]] \
+    && [[ "$merged" != *$'\x1f'* ]]
+then
+    pass "unit-separator merge keeps @ intact"
+else
+    fail "unit-separator merge mangled @ or failed to merge"
+fi
+
+# Partition awk/read path keeps mount targets containing spaces
+section "partition mount points with spaces"
+df_stub="$TEST_CACHE/df-stub"
+# Mimic df -hT columns: Filesystem Type Size Used Avail Use% Mounted on
+cat > "$df_stub" <<'DF'
+Filesystem     Type  Size  Used Avail Use% Mounted on
+/dev/sda1      ext4  100G   50G   50G  50% /
+/dev/sdb1      ext4  200G  100G  100G  50% /mnt/My Drive
+tmpfs          tmpfs 1.0G     0  1.0G   0% /run
+DF
+part_parsed="$TEST_CACHE/part-parsed"
+awk -v filter="tmpfs|vfat|overlay|devtmpfs|squashfs" -v OFS='\t' '
+    NR==1 { next }
+    $2 ~ ("^(" filter ")$") { next }
+    $1 ~ ("^(" filter ")$") { next }
+    {
+        target = $7
+        for (i = 8; i <= NF; i++) target = target " " $i
+        print $2, $3, $4, $5, $6, target
+    }
+' "$df_stub" | sort -t $'\t' -k6 > "$part_parsed"
+found_spaced=0
+while IFS=$'\t' read -r _fstype size _used avail pcent target; do
+    if [[ "$target" == "/mnt/My Drive" ]]; then
+        found_spaced=1
+        break
+    fi
+done < "$part_parsed"
+if (( found_spaced )); then
+    pass "partition parser preserves mount point with spaces"
+else
+    fail "partition parser lost mount point with spaces"
+fi
+
 # --- 11. users / bashrc hook helpers ----------------------------------------
 section "users.sh bashrc hook helpers"
 # Minimal log/warn stubs required by lib/users.sh

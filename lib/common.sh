@@ -14,7 +14,8 @@ fi
 
 DASHMOTD_CACHE="${DASHMOTD_CACHE:-$DASHMOTD_ROOT/cache}"
 
-# Load config if not already loaded (do not key off COLUMNS — the shell sets it)
+# Load config if not already loaded (do not key off GRID_COLUMNS or COLUMNS —
+# the shell sets COLUMNS to the terminal width)
 if [[ -z "${DASHMOTD_CONFIG_LOADED:-}" ]]; then
     # shellcheck source=/dev/null
     source "$DASHMOTD_ROOT/config"
@@ -26,6 +27,19 @@ source "$DASHMOTD_ROOT/lib/colors.sh"
 # ensure_cache_dir — create the cache directory if missing
 ensure_cache_dir() {
     mkdir -p "$DASHMOTD_CACHE"
+}
+
+# dashmotd_cache_get FILE KEY — print the value for KEY, no shell evaluation.
+# Cache files are key=value lines; never source them as shell.
+dashmotd_cache_get() {
+    local file="$1" key="$2" line
+    [[ -r "$file" ]] || return 1
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == "$key="* ]] || continue
+        printf '%s' "${line#*=}"
+        return 0
+    done < "$file"
+    return 1
 }
 
 # indent — prefix every line with two spaces

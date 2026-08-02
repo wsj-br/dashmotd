@@ -23,10 +23,12 @@ t_pkgs=0
 s_pkgs=0
 pkg_mgr="${DASHMOTD_PKG_MANAGER}"
 
-if [[ -r "$cache_file" ]]; then
-    # shellcheck source=/dev/null
-    source "$cache_file"
-fi
+last_update="$(dashmotd_cache_get "$cache_file" last_update 2>/dev/null || true)"
+cached_mgr="$(dashmotd_cache_get "$cache_file" cached_mgr 2>/dev/null || true)"
+t_pkgs="$(dashmotd_cache_get "$cache_file" t_pkgs 2>/dev/null || true)"
+s_pkgs="$(dashmotd_cache_get "$cache_file" s_pkgs 2>/dev/null || true)"
+[[ "$t_pkgs" =~ ^[0-9]+$ ]] || t_pkgs=0
+[[ "$s_pkgs" =~ ^[0-9]+$ ]] || s_pkgs=0
 
 count_apt() {
     apt-get -qq update >/dev/null 2>&1 || true
@@ -121,6 +123,9 @@ if [[ "$pkg_mgr" == "unknown" ]]; then
     echo '  package manager not detected'
     exit 0
 fi
+
+[[ "$t_pkgs" =~ ^[0-9]+$ ]] || t_pkgs=0
+[[ "$s_pkgs" =~ ^[0-9]+$ ]] || s_pkgs=0
 
 if (( t_pkgs > 0 )); then
     t_disp="${bred}${t_pkgs}${reset}"

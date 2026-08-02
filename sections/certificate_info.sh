@@ -15,15 +15,16 @@ if ! command -v openssl >/dev/null 2>&1; then
 fi
 
 cache_file="$DASHMOTD_CACHE/certs"
+out_file="$DASHMOTD_CACHE/certs.out"
 today="$(date +%Y%m%d)"
 out=""
 
-if [[ -r "$cache_file" ]]; then
-    # shellcheck source=/dev/null
-    source "$cache_file"
+last_update="$(dashmotd_cache_get "$cache_file" last_update 2>/dev/null || true)"
+if [[ "$last_update" == "$today" && -r "$out_file" ]]; then
+    out="$(cat "$out_file")"
 fi
 
-if [[ "${last_update:-}" != "$today" ]]; then
+if [[ "$last_update" != "$today" ]]; then
     out=""
     now="$(date +%s)"
     export LANG=C.UTF-8
@@ -48,11 +49,8 @@ if [[ "${last_update:-}" != "$today" ]]; then
         fi
         out+=$'\n'"${state} ${host}|${end_fmt}"
     done
-    {
-        echo "last_update=${today}"
-        # Escape single quotes for safe re-source
-        printf "out='%s'\n" "${out//\'/\'\\\'\'}"
-    } > "$cache_file"
+    printf 'last_update=%s\n' "$today" > "$cache_file"
+    printf '%s' "$out" > "$out_file"
 fi
 
 echo

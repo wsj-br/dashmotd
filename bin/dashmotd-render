@@ -31,7 +31,7 @@ fi
 
 mapfile -t layout_rows < <(dashmotd_layout_rows)
 
-cols="${COLUMNS:-2}"
+cols="${GRID_COLUMNS:-2}"
 
 declare -a col_text
 for (( c = 1; c <= cols; c++ )); do
@@ -78,7 +78,9 @@ else
     for (( c = 1; c <= cols; c++ )); do
         paste_args+=("$tmpdir/col$c")
     done
-    merged="$(paste "${paste_args[@]}" | sed 's/\t/@/g' | column -ts '@')"
+    # ASCII unit separator — never appears in printable MOTD text (unlike @).
+    us=$'\x1f'
+    merged="$(paste -d "$us" "${paste_args[@]}" | column -ts "$us")"
 fi
 
 {

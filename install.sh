@@ -82,9 +82,10 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
 fi
 
 # Resolve source tree: local checkout, or bootstrap from tarball.
+# $1 = parent-owned temp dir used when downloading (never created in a subshell).
 # Prints ONLY the absolute path on stdout; all messages go to stderr.
 resolve_source() {
-    local here self
+    local tmp="$1" here self tarball_url extract_dir
     # When piped through curl, BASH_SOURCE may be empty or /dev/fd/*
     self="${BASH_SOURCE[0]:-}"
     if [[ -n "$self" && -f "$self" && "$self" != "/dev/stdin" && "$self" != /dev/fd/* ]]; then
@@ -95,11 +96,8 @@ resolve_source() {
         fi
     fi
 
-    # Bootstrap: download tarball into a temp directory
-    local tmp tarball_url extract_dir
-    tmp="$(mktemp -d)"
-    # shellcheck disable=SC2064
-    trap "rm -rf '$tmp'" EXIT
+    # Bootstrap: download tarball into the caller-provided temp directory
+    [[ -n "$tmp" && -d "$tmp" ]] || die "bootstrap temp directory missing"
 
     if [[ -n "${DASHMOTD_TARBALL:-}" ]]; then
         if [[ -f "$DASHMOTD_TARBALL" ]]; then
@@ -131,14 +129,14 @@ resolve_source() {
 
     extract_dir="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)"
     [[ -n "$extract_dir" && -f "$extract_dir/config" ]] || die "downloaded archive does not look like dashmotd"
-    # Disable cleanup trap — caller will use extract_dir; keep tmp until install finishes
-    trap - EXIT
-    # Export for later cleanup
-    BOOTSTRAP_TMP="$tmp"
     printf '%s\n' "$extract_dir"
 }
 
-SRC="$(resolve_source)"
+# Create bootstrap temp in the parent so cleanup survives command substitution.
+BOOTSTRAP_TMP="$(mktemp -d)"
+# shellcheck disable=SC2064
+trap 'rm -rf "$BOOTSTRAP_TMP"' EXIT
+SRC="$(resolve_source "$BOOTSTRAP_TMP")"
 log "source tree: $SRC"
 
 # shellcheck source=/dev/null
@@ -307,11 +305,6 @@ if (( SHOW_STATIC )) && [[ -s /etc/motd.dashmotd.bak ]]; then
     touch "$PREFIX/show-static-motd"
 else
     rm -f "$PREFIX/show-static-motd"
-fi
-
-# Cleanup bootstrap temp if used
-if [[ -n "${BOOTSTRAP_TMP:-}" && -d "${BOOTSTRAP_TMP:-}" ]]; then
-    rm -rf "$BOOTSTRAP_TMP"
 fi
 
 if (( USED_UPDATE_MOTD )) && command -v run-parts >/dev/null 2>&1; then
