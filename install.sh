@@ -15,7 +15,9 @@ set -euo pipefail
 PREFIX="/opt/dashmotd"
 UNIT_DIR="/etc/systemd/system"
 MOTD_DIR="/etc/update-motd.d"
-INSTALL_USER="${SUDO_USER:-${USER:-}}"
+# Empty = install bashrc hooks for every human user; --user NAME restricts.
+INSTALL_USER=""
+USER_SPECIFIED=0
 # Default: backup /etc/motd, blank it (pam would otherwise print it after
 # the dynamic MOTD), and show the backup before the dashboard via 50-dashmotd.
 SHOW_STATIC=1
@@ -33,7 +35,8 @@ usage() {
 Usage: install.sh [options]
 
 Options:
-  --user NAME         Install bashrc hook for this user (default: $SUDO_USER)
+  --user NAME         Restrict bashrc hook to this user
+                      (default: every human user on the system)
   --no-static-motd    Do not show the old /etc/motd text before the dashboard
                       (still blanks /etc/motd so pam does not print it after)
   -h, --help          Show this help
@@ -47,7 +50,12 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --user) shift; INSTALL_USER="${1:-}"; [[ -n "$INSTALL_USER" ]] || die "--user requires a name" ;;
+        --user)
+            shift
+            INSTALL_USER="${1:-}"
+            [[ -n "$INSTALL_USER" ]] || die "--user requires a name"
+            USER_SPECIFIED=1
+            ;;
         --no-static-motd) SHOW_STATIC=0 ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown option: $1" ;;
@@ -67,17 +75,10 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
         die "root privileges required"
     fi
     extra_args=()
-    [[ -n "$INSTALL_USER" ]] && extra_args+=(--user "$INSTALL_USER")
+    (( USER_SPECIFIED )) && extra_args+=(--user "$INSTALL_USER")
     (( ! SHOW_STATIC )) && extra_args+=(--no-static-motd)
     exec sudo --preserve-env=DASHMOTD_REPO,DASHMOTD_REF,DASHMOTD_TARBALL,SUDO_USER \
         bash "$self" "${extra_args[@]}"
-fi
-
-# When invoked via sudo without an explicit --user, keep the calling user
-if [[ -z "${INSTALL_USER}" || "${INSTALL_USER}" == "root" ]]; then
-    if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-        INSTALL_USER="$SUDO_USER"
-    fi
 fi
 
 # Resolve source tree: local checkout, or bootstrap from tarball.
@@ -142,6 +143,8 @@ log "source tree: $SRC"
 
 # shellcheck source=/dev/null
 source "$SRC/lib/distro.sh"
+# shellcheck source=/dev/null
+source "$SRC/lib/users.sh"
 dashmotd_detect_os
 log "detected OS family=${DASHMOTD_OS_FAMILY} pkg=${DASHMOTD_PKG_MANAGER}"
 
@@ -215,6 +218,7 @@ install -m 0644 "$SRC/systemd/dashmotd.service" "$PREFIX/systemd/dashmotd.servic
 install -m 0644 "$SRC/systemd/dashmotd.timer" "$PREFIX/systemd/dashmotd.timer"
 install -m 0755 "$SRC/install.sh" "$PREFIX/install.sh"
 install -m 0755 "$SRC/uninstall.sh" "$PREFIX/uninstall.sh" 2>/dev/null || true
+install -m 0755 "$SRC/update.sh" "$PREFIX/update.sh" 2>/dev/null || true
 
 # --- display path (distro-aware) ---------------------------------------------
 # Debian/Ubuntu/Raspberry Pi: /etc/update-motd.d + pam_motd
@@ -273,43 +277,15 @@ log "collecting cached section data"
 log "rendering initial dashboard"
 "$PREFIX/bin/dashmotd-render" >/dev/null
 
-# Bashrc hook for non-login interactive shells
-if [[ -n "$INSTALL_USER" && "$INSTALL_USER" != "root" ]]; then
+# Bashrc hooks for non-login interactive shells (all human users by default)
+if (( USER_SPECIFIED )); then
     home="$(getent passwd "$INSTALL_USER" | cut -d: -f6 || true)"
-    if [[ -n "$home" && -d "$home" ]]; then
-        hook_dir="$home/.bashrc.d"
-        mkdir -p "$hook_dir"
-        hook="$hook_dir/21-dashmotd.sh"
-        log "installing bashrc hook $hook"
-        cat > "$hook" <<'HOOK'
-# dashmotd — render dashboard in non-login interactive shells only
-# (login shells already get it via pam_motd / update-motd.d)
-if [[ $- == *i* ]] && ! shopt -q login_shell; then
-    if [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
-        /opt/dashmotd/bin/dashmotd-render
-    fi
-fi
-HOOK
-        chown "$INSTALL_USER:" "$hook" 2>/dev/null || true
-        # Ensure .bashrc sources ~/.bashrc.d if not already
-        bashrc="$home/.bashrc"
-        if [[ -f "$bashrc" ]] && ! grep -q 'bashrc.d' "$bashrc"; then
-            log "appending ~/.bashrc.d loader to $bashrc"
-            cat >> "$bashrc" <<'RC'
-
-# dashmotd: load interactive snippets
-if [ -d ~/.bashrc.d ]; then
-    for _rc_file in ~/.bashrc.d/*.sh; do
-        [ -r "$_rc_file" ] && . "$_rc_file"
-    done
-    unset _rc_file
-fi
-RC
-            chown "$INSTALL_USER:" "$bashrc" 2>/dev/null || true
-        fi
-    else
-        warn "could not resolve home for user $INSTALL_USER; skipping bashrc hook"
-    fi
+    dashmotd_install_user_hook "$INSTALL_USER" "$home"
+else
+    while IFS=: read -r _uname _uhome; do
+        [[ -n "$_uname" ]] || continue
+        dashmotd_install_user_hook "$_uname" "$_uhome"
+    done < <(dashmotd_list_target_users)
 fi
 
 # Move static /etc/motd before the dashboard (pam prints it after dynamic MOTD).

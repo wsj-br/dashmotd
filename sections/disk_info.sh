@@ -29,7 +29,11 @@ while read -r disk; do
         smartctl -A -H -d auto "$disk" >"$smart_tmp" 2>/dev/null || true
     fi
 
-    age_h="$(awk -F: '/Power On Hours/ {print $2; exit} /Power_On_Hours/ {print $4; exit}' "$smart_tmp" | tr -cd '0-9')"
+    # NVMe: "Key: value" lines. ATA/SATA: attribute table with RAW_VALUE in $NF.
+    age_h="$(awk '
+        /Power On Hours:/ { if (match($0, /[0-9]+/)) { print substr($0, RSTART, RLENGTH); exit } }
+        $2 == "Power_On_Hours" { print $NF; exit }
+    ' "$smart_tmp" | tr -cd '0-9')"
     if [[ -n "$age_h" ]]; then
         age_y=$(( age_h / 24 / 365 ))
         age="$(color_below "$age_y" "$POWERON_WARN" 'y')"
@@ -37,15 +41,20 @@ while read -r disk; do
         age='.'
     fi
 
-    temp="$(awk -F: '/^Temperature:/ {gsub(/[^0-9]/,"",$2); print $2; exit}
-        /Temperature_Celsius|Airflow_Temperature_Cel/ {print $2; exit}' "$smart_tmp")"
+    temp="$(awk '
+        /^Temperature:/ { if (match($0, /[0-9]+/)) { print substr($0, RSTART, RLENGTH); exit } }
+        $2 == "Temperature_Celsius" || $2 == "Airflow_Temperature_Cel" { print $NF; exit }
+    ' "$smart_tmp" | tr -cd '0-9')"
     if [[ -n "$temp" ]]; then
         temp="$(color_below "$temp" "$TEMP_WARN" '°C')"
     else
         temp='.'
     fi
 
-    cycle="$(awk -F: '/Power Cycles/ {print $2; exit} /Load_Cycle_Count/ {print $3; exit}' "$smart_tmp" | tr -cd '0-9')"
+    cycle="$(awk '
+        /Power Cycles:/ { if (match($0, /[0-9]+/)) { print substr($0, RSTART, RLENGTH); exit } }
+        $2 == "Power_Cycle_Count" || $2 == "Load_Cycle_Count" { print $NF; exit }
+    ' "$smart_tmp" | tr -cd '0-9')"
     if [[ -n "$cycle" ]]; then
         cycle_k=$(( cycle / 1000 ))
         cycle="$(color_below "$cycle_k" "$LOADCYCLE_WARN" 'k')"
@@ -53,8 +62,18 @@ while read -r disk; do
         cycle='.'
     fi
 
-    spare="$(awk -F: '/Available Spare:/ {gsub(/ /,"",$2); print $2; exit}
-        /Reallocated_Sector_Ct/ {print $4; exit}' "$smart_tmp")"
+    # Prefer available-spare style attrs over reallocated-sector count.
+    spare="$(awk '
+        /Available Spare:/ {
+            n = $0; sub(/^[^:]*:/, "", n); gsub(/[ \t]/, "", n); pref = n
+        }
+        $2 == "Available_Reservd_Space" { pref = $NF "%" }
+        $2 == "Reallocated_Sector_Ct" { if (pref == "") fallback = $NF }
+        END {
+            if (pref != "") print pref
+            else if (fallback != "") print fallback
+        }
+    ' "$smart_tmp")"
     spare="${spare:-.}"
 
     if grep -qiE 'test result: PASSED|Health Status:\s*OK' "$smart_tmp"; then

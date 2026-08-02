@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
-# dashmotd uninstaller — removes units, entry script, bashrc hook, and /opt/dashmotd.
+# dashmotd uninstaller — removes units, entry script, bashrc hooks, and /opt/dashmotd.
 
 set -euo pipefail
 
 PREFIX="/opt/dashmotd"
 UNIT_DIR="/etc/systemd/system"
 MOTD_DIR="/etc/update-motd.d"
-INSTALL_USER="${SUDO_USER:-${USER:-}}"
+# Empty = remove bashrc hooks for every human user; --user NAME restricts.
+INSTALL_USER=""
+USER_SPECIFIED=0
 
 log()  { printf '[+] %s\n' "$*"; }
 warn() { printf '[!] %s\n' "$*" >&2; }
@@ -15,9 +17,21 @@ die()  { printf '[x] %s\n' "$*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --user) shift; INSTALL_USER="${1:-}" ;;
+        --user)
+            shift
+            INSTALL_USER="${1:-}"
+            [[ -n "$INSTALL_USER" ]] || die "--user requires a name"
+            USER_SPECIFIED=1
+            ;;
         -h|--help)
-            echo "Usage: uninstall.sh [--user NAME]"
+            cat <<'EOF'
+Usage: uninstall.sh [--user NAME]
+
+Options:
+  --user NAME         Restrict bashrc hook removal to this user
+                      (default: every human user on the system)
+  -h, --help          Show this help
+EOF
             exit 0
             ;;
         *) die "unknown option: $1" ;;
@@ -27,10 +41,24 @@ done
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     if command -v sudo >/dev/null 2>&1; then
-        exec sudo --preserve-env=SUDO_USER bash "$0" ${INSTALL_USER:+--user "$INSTALL_USER"}
+        extra_args=()
+        (( USER_SPECIFIED )) && extra_args+=(--user "$INSTALL_USER")
+        exec sudo --preserve-env=SUDO_USER bash "$0" "${extra_args[@]}"
     else
         die "root privileges required"
     fi
+fi
+
+# Source helpers before removing $PREFIX (still present at this point).
+if [[ -f "$PREFIX/lib/users.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$PREFIX/lib/users.sh"
+elif [[ -f "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/lib/users.sh" ]]; then
+    # Fallback: running from a git clone that still has lib/
+    # shellcheck source=/dev/null
+    source "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/lib/users.sh"
+else
+    warn "lib/users.sh not found — bashrc hook cleanup may be incomplete"
 fi
 
 if [[ -d /run/systemd/system ]]; then
@@ -63,11 +91,15 @@ if [[ -f /etc/motd.dashmotd.bak ]]; then
     mv /etc/motd.dashmotd.bak /etc/motd
 fi
 
-if [[ -n "$INSTALL_USER" && "$INSTALL_USER" != "root" ]]; then
-    home="$(getent passwd "$INSTALL_USER" | cut -d: -f6 || true)"
-    if [[ -n "$home" && -f "$home/.bashrc.d/21-dashmotd.sh" ]]; then
-        log "removing bashrc hook"
-        rm -f "$home/.bashrc.d/21-dashmotd.sh"
+if declare -F dashmotd_remove_user_hook >/dev/null 2>&1; then
+    if (( USER_SPECIFIED )); then
+        home="$(getent passwd "$INSTALL_USER" | cut -d: -f6 || true)"
+        dashmotd_remove_user_hook "$INSTALL_USER" "$home"
+    else
+        while IFS=: read -r _uname _uhome; do
+            [[ -n "$_uname" ]] || continue
+            dashmotd_remove_user_hook "$_uname" "$_uhome"
+        done < <(dashmotd_list_target_users)
     fi
 fi
 

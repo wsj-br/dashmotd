@@ -49,18 +49,36 @@ the project tarball, installs into `/opt/dashmotd`, wires up systemd +
 Or install from a local tarball / clone:
 
 ```bash
-# from a git clone (installs the bashrc hook for $SUDO_USER automatically)
+# from a git clone (installs bashrc hooks for every human user by default)
 sudo ./install.sh
 
 # from a release archive
 DASHMOTD_TARBALL=./dashmotd.tar.gz sudo -E bash install.sh
 ```
 
+## Update
+
+Refresh an existing install (keeps `/opt/dashmotd/config` and `cache/`):
+
+```bash
+sudo /opt/dashmotd/update.sh
+```
+
+From a git clone instead of downloading GitHub:
+
+```bash
+sudo ./update.sh
+```
+
+Optional overrides: `DASHMOTD_REF=main`, `DASHMOTD_REPO=...`, `DASHMOTD_TARBALL=...`
+(same meaning as for `install.sh`). The updater replaces scripts, systemd units,
+and MOTD hooks, then runs collect + render.
+
 ### Options
 
 | Flag / env | Meaning |
 |---|---|
-| `--user NAME` | Install the non-login bashrc hook for this user (default: `$SUDO_USER`) |
+| `--user NAME` | Restrict the non-login bashrc hook to this user (default: every human user on the system) |
 | `--no-static-motd` | Do not show the old `/etc/motd` text before the dashboard (still blanks it so pam does not print it after) |
 | `DASHMOTD_REPO` | GitHub repo URL used when bootstrapping |
 | `DASHMOTD_REF` | Branch or tag (default `main`) |
@@ -140,10 +158,26 @@ Render (every login / interactive shell):
   `/etc/update-motd.d/50-dashmotd`, which optionally prints the backed-up
   static `/etc/motd` text first, then calls `dashmotd-render`. The installer
   blanks `/etc/motd` so pam does not repeat that text after the dashboard.
-  Elsewhere the installer drops `/etc/profile.d/zzz-dashmotd.sh`. A guarded
-  `~/.bashrc.d/21-dashmotd.sh` also renders in non-login interactive shells
-  (tmux/byobu) without double-printing at login. Render always samples
-  `LIVE_SECTIONS` and reads everything else from the collect cache.
+  Elsewhere the installer drops `/etc/profile.d/zzz-dashmotd.sh`. For
+  non-login interactive shells (tmux/byobu) the installer also adds a
+  guarded hook for every human user on the system (or only `--user NAME`):
+  if `~/.bashrc` already sources `~/.bashrc.d/*.sh`, it writes
+  `~/.bashrc.d/21-dashmotd.sh`; otherwise it appends a marker-delimited
+  block directly to `~/.bashrc` so the hook runs without inventing a
+  `.bashrc.d` layout. Render always samples `LIVE_SECTIONS` and reads
+  everything else from the collect cache.
+
+```bash
+# >>> dashmotd hook >>>
+# dashmotd — render dashboard in non-login interactive shells only
+# (login shells already get it via pam_motd / update-motd.d)
+if [[ $- == *i* ]] && ! shopt -q login_shell; then
+    if [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
+        /opt/dashmotd/bin/dashmotd-render
+    fi
+fi
+# <<< dashmotd hook <<<
+```
 
 ## Configuration
 
@@ -249,9 +283,10 @@ sudo /opt/dashmotd/uninstall.sh
 sudo ./uninstall.sh
 ```
 
-This removes the systemd units, the `update-motd.d` entry, the bashrc hook,
-and `/opt/dashmotd`. It re-enables `/etc/update-motd.d/10-uname` if it was
-disabled, and restores `/etc/motd` if a backup was made.
+This removes the systemd units, the `update-motd.d` entry, per-user bashrc
+hooks (both `~/.bashrc.d/21-dashmotd.sh` and any inlined marker block in
+`~/.bashrc`), and `/opt/dashmotd`. It re-enables `/etc/update-motd.d/10-uname`
+if it was disabled, and restores `/etc/motd` if a backup was made.
 
 ## License
 

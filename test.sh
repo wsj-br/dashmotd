@@ -52,11 +52,13 @@ for path in \
     lib/cpu.sh \
     lib/distro.sh \
     lib/layout.sh \
+    lib/users.sh \
     update-motd.d/50-dashmotd \
     systemd/dashmotd.service \
     systemd/dashmotd.timer \
     install.sh \
-    uninstall.sh
+    uninstall.sh \
+    update.sh
 do
     if [[ -e "$ROOT/$path" ]]; then
         pass "exists $path"
@@ -376,6 +378,76 @@ if [[ "$sample" == *$'\e['* ]]; then
 else
     fail "color_below did not emit ANSI color"
 fi
+
+# --- 11. users / bashrc hook helpers ----------------------------------------
+section "users.sh bashrc hook helpers"
+# Minimal log/warn stubs required by lib/users.sh
+log()  { :; }
+warn() { :; }
+# shellcheck source=/dev/null
+source "$ROOT/lib/users.sh"
+
+USERS_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/dashmotd-users.XXXXXX")"
+owner="$(id -un)"
+
+# Wired bashrc: sources ~/.bashrc.d
+wired_home="$USERS_FIXTURE/wired"
+mkdir -p "$wired_home"
+cat > "$wired_home/.bashrc" <<'RC'
+# load snippets
+if [ -d ~/.bashrc.d ]; then
+    for f in ~/.bashrc.d/*.sh; do [ -r "$f" ] && . "$f"; done
+fi
+RC
+if dashmotd_bashrc_wired "$wired_home"; then
+    pass "dashmotd_bashrc_wired detects bashrc.d loader"
+else
+    fail "dashmotd_bashrc_wired missed wired bashrc"
+fi
+
+# Unwired bashrc: no bashrc.d reference
+unwired_home="$USERS_FIXTURE/unwired"
+mkdir -p "$unwired_home"
+printf '# plain bashrc\nexport FOO=1\n' > "$unwired_home/.bashrc"
+if ! dashmotd_bashrc_wired "$unwired_home"; then
+    pass "dashmotd_bashrc_wired rejects unwired bashrc"
+else
+    fail "dashmotd_bashrc_wired false-positive on unwired bashrc"
+fi
+
+# Upsert is idempotent (exactly one marker block after two runs)
+dashmotd_upsert_bashrc_block "$unwired_home" "$owner" >/dev/null
+dashmotd_upsert_bashrc_block "$unwired_home" "$owner" >/dev/null
+begin_count="$(grep -cF "$DASHMOTD_HOOK_BEGIN" "$unwired_home/.bashrc" || true)"
+end_count="$(grep -cF "$DASHMOTD_HOOK_END" "$unwired_home/.bashrc" || true)"
+if [[ "$begin_count" == "1" && "$end_count" == "1" ]] \
+    && grep -Fq 'dashmotd-render' "$unwired_home/.bashrc"
+then
+    pass "dashmotd_upsert_bashrc_block is idempotent (one marker block)"
+else
+    fail "dashmotd_upsert_bashrc_block not idempotent (begin=$begin_count end=$end_count)"
+fi
+
+# Remove leaves the rest of the file intact
+dashmotd_remove_bashrc_block "$unwired_home" "$owner"
+if ! grep -Fq "$DASHMOTD_HOOK_BEGIN" "$unwired_home/.bashrc" \
+    && ! grep -Fq 'dashmotd-render' "$unwired_home/.bashrc" \
+    && grep -Fq 'export FOO=1' "$unwired_home/.bashrc"
+then
+    pass "dashmotd_remove_bashrc_block removes block, keeps other content"
+else
+    fail "dashmotd_remove_bashrc_block damaged bashrc content"
+fi
+
+# Wired path writes ~/.bashrc.d/21-dashmotd.sh
+hook_path="$(dashmotd_write_hook_file "$wired_home" "$owner")"
+if [[ -f "$hook_path" ]] && grep -Fq 'dashmotd-render' "$hook_path"; then
+    pass "dashmotd_write_hook_file creates bashrc.d/21-dashmotd.sh"
+else
+    fail "dashmotd_write_hook_file did not create hook file"
+fi
+
+rm -rf "$USERS_FIXTURE"
 
 # --- summary -----------------------------------------------------------------
 section "summary"
