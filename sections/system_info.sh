@@ -28,7 +28,7 @@ lines+=("${cpu_disp}|cpu|${load_disp}|load")
 temp_line=""
 if [[ -r /sys/class/thermal/thermal_zone0/temp ]]; then
     temp=$(( $(cat /sys/class/thermal/thermal_zone0/temp) / 1000 ))
-    temp_disp="$(color_below "$temp" "$TEMP_WARN" '°c')"
+    temp_disp="$(color_below "$temp" "$TEMP_WARN" '°C')"
     temp_line="${mem_disp}|memory|${temp_disp}|temp"
 else
     temp_line="${mem_disp}|memory|"

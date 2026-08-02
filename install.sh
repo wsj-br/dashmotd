@@ -16,7 +16,9 @@ PREFIX="/opt/dashmotd"
 UNIT_DIR="/etc/systemd/system"
 MOTD_DIR="/etc/update-motd.d"
 INSTALL_USER="${SUDO_USER:-${USER:-}}"
-CLEAR_STATIC=0
+# Default: backup /etc/motd, blank it (pam would otherwise print it after
+# the dynamic MOTD), and show the backup before the dashboard via 50-dashmotd.
+SHOW_STATIC=1
 
 DASHMOTD_REPO="${DASHMOTD_REPO:-https://github.com/wsj/dashmotd}"
 DASHMOTD_REF="${DASHMOTD_REF:-main}"
@@ -31,7 +33,8 @@ Usage: install.sh [options]
 
 Options:
   --user NAME         Install bashrc hook for this user (default: $SUDO_USER)
-  --no-static-motd    Blank /etc/motd (backed up first)
+  --no-static-motd    Do not show the old /etc/motd text before the dashboard
+                      (still blanks /etc/motd so pam does not print it after)
   -h, --help          Show this help
 
 Environment:
@@ -44,7 +47,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --user) shift; INSTALL_USER="${1:-}"; [[ -n "$INSTALL_USER" ]] || die "--user requires a name" ;;
-        --no-static-motd) CLEAR_STATIC=1 ;;
+        --no-static-motd) SHOW_STATIC=0 ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown option: $1" ;;
     esac
@@ -64,7 +67,7 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     fi
     extra_args=()
     [[ -n "$INSTALL_USER" ]] && extra_args+=(--user "$INSTALL_USER")
-    (( CLEAR_STATIC )) && extra_args+=(--no-static-motd)
+    (( ! SHOW_STATIC )) && extra_args+=(--no-static-motd)
     exec sudo --preserve-env=DASHMOTD_REPO,DASHMOTD_REF,DASHMOTD_TARBALL,SUDO_USER \
         bash "$self" "${extra_args[@]}"
 fi
@@ -308,13 +311,25 @@ RC
     fi
 fi
 
-# Optional static motd blanking
-if (( CLEAR_STATIC )); then
-    if [[ -s /etc/motd ]]; then
+# Move static /etc/motd before the dashboard (pam prints it after dynamic MOTD).
+# Backup + blank so the text is not duplicated after dashmotd.
+if [[ -s /etc/motd ]]; then
+    if [[ ! -e /etc/motd.dashmotd.bak ]]; then
         log "backing up /etc/motd -> /etc/motd.dashmotd.bak"
         cp -a /etc/motd /etc/motd.dashmotd.bak
-        : > /etc/motd
     fi
+    log "blanking /etc/motd (shown before dashboard via 50-dashmotd when enabled)"
+    : > /etc/motd
+elif [[ ! -e /etc/motd.dashmotd.bak ]]; then
+    # Ensure the file exists so pam_motd has a harmless empty static MOTD
+    : > /etc/motd 2>/dev/null || true
+fi
+
+if (( SHOW_STATIC )) && [[ -s /etc/motd.dashmotd.bak ]]; then
+    log "enabling static MOTD preamble before dashboard"
+    touch "$PREFIX/show-static-motd"
+else
+    rm -f "$PREFIX/show-static-motd"
 fi
 
 # Cleanup bootstrap temp if used

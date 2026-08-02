@@ -1,6 +1,11 @@
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd common helpers — sourced by section scripts.
 
+# pam_motd runs update-motd.d via `env -i` (empty LANG). Force a UTF-8 locale
+# so symbols like °C survive SSH login MOTD generation.
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
 # Resolve project root relative to the calling section (sections/..)
 # or absolute when ROOT is already set by the renderer.
 if [[ -z "${DASHMOTD_ROOT:-}" ]]; then

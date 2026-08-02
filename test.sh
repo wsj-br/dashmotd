@@ -338,6 +338,26 @@ else
     fail "50-dashmotd did not render the dashboard"
 fi
 
+# Static MOTD preamble (requires /opt/dashmotd/show-static-motd marker)
+preamble_out="$TEST_CACHE/preamble.out"
+static_bak="$TEST_CACHE/static-motd.bak"
+printf 'STATIC PREAMBLE LINE\n' >"$static_bak"
+if [[ -e /opt/dashmotd/show-static-motd ]]; then
+    if DASHMOTD_STATIC_MOTD="$static_bak" \
+        DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
+        DASHMOTD_CACHE="$TEST_CACHE" \
+        "$ROOT/update-motd.d/50-dashmotd" >"$preamble_out" 2>/dev/null \
+        && head -n1 "$preamble_out" | grep -Fq 'STATIC PREAMBLE LINE' \
+        && grep -Fq "system info:" "$preamble_out"
+    then
+        pass "50-dashmotd prints static MOTD before dashboard"
+    else
+        fail "50-dashmotd did not prepend static MOTD"
+    fi
+else
+    pass "50-dashmotd static preamble check skipped (no /opt/dashmotd/show-static-motd)"
+fi
+
 # --- 10. helpers -------------------------------------------------------------
 section "helpers"
 cpu_val="$("$ROOT/lib/cpu.sh" 2>/dev/null || echo "")"

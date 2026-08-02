@@ -57,7 +57,7 @@ DASHMOTD_TARBALL=./dashmotd.tar.gz sudo -E bash install.sh
 | Flag / env | Meaning |
 |---|---|
 | `--user NAME` | Install the non-login bashrc hook for this user (default: `$SUDO_USER`) |
-| `--no-static-motd` | Blank `/etc/motd` (backed up as `/etc/motd.dashmotd.bak`) |
+| `--no-static-motd` | Do not show the old `/etc/motd` text before the dashboard (still blanks it so pam does not print it after) |
 | `DASHMOTD_REPO` | GitHub repo URL used when bootstrapping |
 | `DASHMOTD_REF` | Branch or tag (default `main`) |
 | `DASHMOTD_TARBALL` | Local path or URL of a `.tar.gz` (skips GitHub) |
@@ -133,8 +133,10 @@ Render (every login / interactive shell):
   `cache/last_update`. Live keys are skipped. Slow lookups (public IP,
   packages, TLS expiry) may also keep their own files under `cache/`.
 - **Render path** (every display): `pam_motd` runs
-  `/etc/update-motd.d/50-dashmotd`, which calls `dashmotd-render`. Elsewhere
-  the installer drops `/etc/profile.d/zzz-dashmotd.sh`. A guarded
+  `/etc/update-motd.d/50-dashmotd`, which optionally prints the backed-up
+  static `/etc/motd` text first, then calls `dashmotd-render`. The installer
+  blanks `/etc/motd` so pam does not repeat that text after the dashboard.
+  Elsewhere the installer drops `/etc/profile.d/zzz-dashmotd.sh`. A guarded
   `~/.bashrc.d/21-dashmotd.sh` also renders in non-login interactive shells
   (tmux/byobu) without double-printing at login. Render always samples
   `LIVE_SECTIONS` and reads everything else from the collect cache.

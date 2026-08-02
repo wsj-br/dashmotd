@@ -1,9 +1,25 @@
 #!/bin/sh
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
-# update-motd.d entry: render the dashboard (live + collected cache).
+# update-motd.d entry: optional static /etc/motd preamble, then dashboard.
+#
+# pam_motd prints /run/motd.dynamic first, then /etc/motd. The installer
+# backs up and blanks /etc/motd so the legal/admin text is not shown after
+# the dashboard; we print the backup here so it appears before instead.
 
+# pam_motd runs this via `env -i` (no LANG). Force UTF-8 for °C etc.
+LANG="${LANG:-C.UTF-8}"
+LC_ALL="${LC_ALL:-C.UTF-8}"
+export LANG LC_ALL
+
+STATIC="${DASHMOTD_STATIC_MOTD:-/etc/motd.dashmotd.bak}"
 RENDER="${DASHMOTD_RENDER:-/opt/dashmotd/bin/dashmotd-render}"
 FALLBACK="${DASHMOTD_MOTD:-/opt/dashmotd/cache/motd}"
+
+# Skip preamble when install used --no-static-motd (marker absent).
+if [ -e /opt/dashmotd/show-static-motd ] && [ -s "$STATIC" ]; then
+    cat "$STATIC"
+    echo
+fi
 
 if [ -x "$RENDER" ]; then
     "$RENDER"

@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# pam/timer may run with an empty locale; keep UTF-8 for cached section text.
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export DASHMOTD_ROOT="$ROOT"
 export DASHMOTD_CACHE="${DASHMOTD_CACHE:-$ROOT/cache}"

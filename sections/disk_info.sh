@@ -40,7 +40,7 @@ while read -r disk; do
     temp="$(awk -F: '/^Temperature:/ {gsub(/[^0-9]/,"",$2); print $2; exit}
         /Temperature_Celsius|Airflow_Temperature_Cel/ {print $2; exit}' "$smart_tmp")"
     if [[ -n "$temp" ]]; then
-        temp="$(color_below "$temp" "$TEMP_WARN" '°')"
+        temp="$(color_below "$temp" "$TEMP_WARN" '°C')"
     else
         temp='.'
     fi
