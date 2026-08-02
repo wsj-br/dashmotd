@@ -8,6 +8,28 @@ dashmotd separates **collect** (slow / privilege-sensitive data, hourly) from
 cache), so SSH logins stay fast while system info, partitions, and containers
 reflect current status.
 
+## Prerequisites
+
+- A supported Linux distribution (see [Supported distributions](#supported-distributions))
+- Root privileges to install (the installer configures systemd and MOTD hooks)
+- `systemd` recommended (hourly collect timer); without it, run `dashmotd-collect` from cron
+- On Debian-family systems: `pam_motd` + `/etc/update-motd.d` (usual default). Elsewhere the installer falls back to `/etc/profile.d`
+
+**Required commands:** `bash`, `column`, `paste`, `free`, `awk`, `sed`, `grep`, `mktemp`
+
+**Recommended** (sections degrade gracefully if missing): `smartmontools` (`smartctl`), `openssl`, `curl` or `wget`, `figlet` (+ `toilet-fonts` on Debian for the mono9 font), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
+
+```bash
+# Debian / Ubuntu / Raspberry Pi / Zorin
+sudo apt-get install -y smartmontools openssl wget curl figlet toilet-fonts
+
+# RHEL / Oracle Linux / Rocky / Alma / Fedora
+sudo dnf install -y smartmontools openssl wget curl figlet
+
+# Arch / Manjaro
+sudo pacman -S --needed smartmontools openssl wget curl figlet pacman-contrib
+```
+
 ## Quick install
 
 ```bash
@@ -17,14 +39,8 @@ curl -fsSL https://raw.githubusercontent.com/wsj/dashmotd/main/install.sh | sudo
 The installer is self-bootstrapping: when piped through `curl` it downloads
 the project tarball, installs into `/opt/dashmotd`, wires up systemd +
 `update-motd.d`, collects the first cache, and renders a preview. Pipe into
-`sudo bash` (root is required; a non-root pipe cannot re-exec itself). Override
-the source with:
+`sudo bash` (root is required; a non-root pipe cannot re-exec itself). 
 
-```bash
-DASHMOTD_REPO=https://github.com/<owner>/dashmotd \
-DASHMOTD_REF=main \
-  curl -fsSL https://raw.githubusercontent.com/<owner>/dashmotd/main/install.sh | sudo bash
-```
 
 Or install from a local tarball / clone:
 
@@ -185,23 +201,6 @@ sudo /opt/dashmotd/bin/dashmotd-banner
 | `certs` | `certificate_info.sh` | collect | TLS certificate expiry via `openssl` |
 | `docker` | `docker_info.sh` | live | Container names and running/stopped marks |
 | `lastupdate` | `last_update.sh` | collect | When `dashmotd-collect` last refreshed cached data |
-
-## Dependencies
-
-**Required:** `bash`, `column`, `paste`, `free`, `awk`, `sed`, `grep`, `mktemp`
-
-**Recommended:** `smartmontools`, `openssl`, `curl` or `wget`, `figlet` (+ `toilet-fonts` on Debian for mono9), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
-
-```bash
-# Debian / Ubuntu / Raspberry Pi / Zorin
-sudo apt-get install -y smartmontools openssl wget curl figlet toilet-fonts
-
-# RHEL / Oracle Linux / Rocky / Alma / Fedora
-sudo dnf install -y smartmontools openssl wget curl figlet
-
-# Arch / Manjaro
-sudo pacman -S --needed smartmontools openssl wget curl figlet pacman-contrib
-```
 
 ## Uninstall
 
