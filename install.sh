@@ -6,7 +6,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/<owner>/dashmotd/main/install.sh | sudo bash
 #
 # Environment:
-#   DASHMOTD_REPO     GitHub repo URL (default: https://github.com/wsj/dashmotd)
+#   DASHMOTD_REPO     GitHub repo URL (default: https://github.com/wsj-br/dashmotd)
 #   DASHMOTD_REF      git ref / branch / tag for tarball (default: main)
 #   DASHMOTD_TARBALL  local .tar.gz path or URL (overrides DASHMOTD_REPO)
 
@@ -20,7 +20,7 @@ INSTALL_USER="${SUDO_USER:-${USER:-}}"
 # the dynamic MOTD), and show the backup before the dashboard via 50-dashmotd.
 SHOW_STATIC=1
 
-DASHMOTD_REPO="${DASHMOTD_REPO:-https://github.com/wsj/dashmotd}"
+DASHMOTD_REPO="${DASHMOTD_REPO:-https://github.com/wsj-br/dashmotd}"
 DASHMOTD_REF="${DASHMOTD_REF:-main}"
 
 log()  { printf '[+] %s\n' "$*"; }
