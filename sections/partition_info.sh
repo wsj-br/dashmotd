@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: partitions usage (df-based)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -26,7 +27,7 @@ done < <(df -hT 2>/dev/null | awk -v filter="$PARTITION_FILTER" -v OFS='\t' '
 ' | sort -t $'\t' -k6)
 
 echo
-echo 'partitions usage:'
+echo "${bold}partitions usage:${reset}"
 if [[ -z "$out" ]]; then
     echo '  none'
 else

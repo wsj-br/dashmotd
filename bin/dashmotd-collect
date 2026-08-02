@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Collect slow / privilege-sensitive section data into cache/sections/.
 # Invoked by the hourly timer — never at login.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 

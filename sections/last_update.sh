@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: last update (when dashmotd-collect last refreshed cached data)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -17,5 +18,5 @@ else
 fi
 
 echo
-echo 'last update:'
+echo "${bold}last update:${reset}"
 printf '  %s\n' "$stamp"

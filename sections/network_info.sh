@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: network (public IP cached daily, private IP)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -88,7 +89,7 @@ else
 fi
 
 echo
-echo 'network:'
+echo "${bold}network:${reset}"
 {
     echo -e "public ip|${public_ip:-unknown}"
     echo -e "private ip|${private_ip:-unknown}"

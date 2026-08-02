@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Sample CPU usage from /proc/stat over a short interval.
 # Prints a single integer percentage to stdout.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 renice -n 20 -p "$$" &>/dev/null || true
 

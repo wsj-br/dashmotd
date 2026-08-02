@@ -1,5 +1,6 @@
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd common helpers — sourced by section scripts.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 # pam_motd runs update-motd.d via `env -i` (empty LANG). Force a UTF-8 locale
 # so symbols like °C survive SSH login MOTD generation.

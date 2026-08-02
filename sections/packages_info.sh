@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: packages — upgradable count across apt / dnf / yum / pacman / zypper
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -119,7 +120,7 @@ fi
 
 if [[ "$pkg_mgr" == "unknown" ]]; then
     echo
-    echo 'packages:'
+    echo "${bold}packages:${reset}"
     echo '  package manager not detected'
     exit 0
 fi
@@ -140,7 +141,7 @@ else
 fi
 
 echo
-echo 'packages:'
+echo "${bold}packages:${reset}"
 echo -e "  ${msg}"
 if reboot_required; then
     echo -e "  ${bred}!${reset} reboot required"

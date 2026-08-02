@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: system info (kernel, tasks, cpu, load, memory, temperature)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -36,7 +37,7 @@ fi
 lines+=("$temp_line")
 
 echo
-echo 'system info:'
+echo "${bold}system info:${reset}"
 {
     for line in "${lines[@]}"; do
         echo -e "$line"

@@ -1,10 +1,15 @@
 #!/bin/sh
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # update-motd.d entry: optional static /etc/motd preamble, then dashboard.
 #
 # pam_motd prints /run/motd.dynamic first, then /etc/motd. The installer
 # backs up and blanks /etc/motd so the legal/admin text is not shown after
 # the dashboard; we print the backup here so it appears before instead.
+#
+# pam_motd also runs this for non-interactive sessions (scp/sftp/git-over-ssh).
+# Skip the live render when there is no controlling terminal — those sessions
+# discard MOTD output anyway, and rendering (e.g. docker ps) is wasted work.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 # pam_motd runs this via `env -i` (no LANG). Force UTF-8 for °C etc.
 LANG="${LANG:-C.UTF-8}"
@@ -19,6 +24,15 @@ FALLBACK="${DASHMOTD_MOTD:-/opt/dashmotd/cache/motd}"
 if [ -e /opt/dashmotd/show-static-motd ] && [ -s "$STATIC" ]; then
     cat "$STATIC"
     echo
+fi
+
+# Best-effort interactivity probe: interactive ssh/console sessions have a
+# controlling tty by the time pam_motd runs; non-interactive ones typically do not.
+# DASHMOTD_FORCE_TTY=1 bypasses the probe (used by test.sh / manual previews).
+if [ -z "${DASHMOTD_FORCE_TTY:-}" ]; then
+    if ! (exec 3<>/dev/tty) 2>/dev/null; then
+        exit 0
+    fi
 fi
 
 if [ -x "$RENDER" ]; then

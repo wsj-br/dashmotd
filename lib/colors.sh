@@ -1,11 +1,16 @@
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd color helpers — sourced by section scripts
 # Provides ANSI bold green/red threshold coloring.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 reset=$'\e[0m'
+bold=$'\e[1m'
 bred=$'\e[1;31m'
 bgreen=$'\e[1;32m'
 bblue=$'\e[1;34m'
+gray=$'\e[90m'
+underline=$'\e[4m'
+
 
 # color_below VALUE THRESHOLD [SUFFIX]
 # Prints VALUE(+SUFFIX) in green when VALUE < THRESHOLD, else red.

@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd uninstaller — removes units, entry script, bashrc hooks, and /opt/dashmotd.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 
 PREFIX="/opt/dashmotd"
 UNIT_DIR="/etc/systemd/system"
 MOTD_DIR="/etc/update-motd.d"
-# Empty = remove bashrc hooks for every human user; --user NAME restricts.
-INSTALL_USER=""
-USER_SPECIFIED=0
 
 log()  { printf '[+] %s\n' "$*"; }
 warn() { printf '[!] %s\n' "$*" >&2; }
@@ -17,19 +15,14 @@ die()  { printf '[x] %s\n' "$*" >&2; exit 1; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --user)
-            shift
-            INSTALL_USER="${1:-}"
-            [[ -n "$INSTALL_USER" ]] || die "--user requires a name"
-            USER_SPECIFIED=1
-            ;;
         -h|--help)
             cat <<'EOF'
-Usage: uninstall.sh [--user NAME]
+Usage: uninstall.sh
+
+Removes dashmotd systemd units, MOTD/profile hooks, the system-wide bashrc
+hook, any legacy per-user bashrc hooks from older releases, and /opt/dashmotd.
 
 Options:
-  --user NAME         Restrict bashrc hook removal to this user
-                      (default: every human user on the system)
   -h, --help          Show this help
 EOF
             exit 0
@@ -41,9 +34,7 @@ done
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     if command -v sudo >/dev/null 2>&1; then
-        extra_args=()
-        (( USER_SPECIFIED )) && extra_args+=(--user "$INSTALL_USER")
-        exec sudo --preserve-env=SUDO_USER bash "$0" "${extra_args[@]}"
+        exec sudo --preserve-env=SUDO_USER bash "$0"
     else
         die "root privileges required"
     fi
@@ -91,16 +82,11 @@ if [[ -f /etc/motd.dashmotd.bak ]]; then
     mv /etc/motd.dashmotd.bak /etc/motd
 fi
 
-if declare -F dashmotd_remove_user_hook >/dev/null 2>&1; then
-    if (( USER_SPECIFIED )); then
-        home="$(getent passwd "$INSTALL_USER" | cut -d: -f6 || true)"
-        dashmotd_remove_user_hook "$INSTALL_USER" "$home"
-    else
-        while IFS=: read -r _uname _uhome; do
-            [[ -n "$_uname" ]] || continue
-            dashmotd_remove_user_hook "$_uname" "$_uhome"
-        done < <(dashmotd_list_target_users)
-    fi
+if declare -F dashmotd_remove_system_hook >/dev/null 2>&1; then
+    dashmotd_remove_system_hook
+fi
+if declare -F dashmotd_remove_legacy_user_hooks >/dev/null 2>&1; then
+    dashmotd_remove_legacy_user_hooks
 fi
 
 if [[ -d "$PREFIX" ]]; then

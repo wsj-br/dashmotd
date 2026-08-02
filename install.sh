@@ -1,23 +1,21 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd installer — clean install only.
 # Usage:
-#   sudo ./install.sh [--user NAME] [--no-static-motd]
+#   sudo ./install.sh [--no-static-motd]
 #   curl -fsSL https://raw.githubusercontent.com/<owner>/dashmotd/main/install.sh | sudo bash
 #
 # Environment:
 #   DASHMOTD_REPO     GitHub repo URL (default: https://github.com/wsj-br/dashmotd)
 #   DASHMOTD_REF      git ref / branch / tag for tarball (default: main)
 #   DASHMOTD_TARBALL  local .tar.gz path or URL (overrides DASHMOTD_REPO)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 
 PREFIX="/opt/dashmotd"
 UNIT_DIR="/etc/systemd/system"
 MOTD_DIR="/etc/update-motd.d"
-# Empty = install bashrc hooks for every human user; --user NAME restricts.
-INSTALL_USER=""
-USER_SPECIFIED=0
 # Default: backup /etc/motd, blank it (pam would otherwise print it after
 # the dynamic MOTD), and show the backup before the dashboard via 50-dashmotd.
 SHOW_STATIC=1
@@ -35,8 +33,6 @@ usage() {
 Usage: install.sh [options]
 
 Options:
-  --user NAME         Restrict bashrc hook to this user
-                      (default: every human user on the system)
   --no-static-motd    Do not show the old /etc/motd text before the dashboard
                       (still blanks /etc/motd so pam does not print it after)
   -h, --help          Show this help
@@ -50,12 +46,6 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --user)
-            shift
-            INSTALL_USER="${1:-}"
-            [[ -n "$INSTALL_USER" ]] || die "--user requires a name"
-            USER_SPECIFIED=1
-            ;;
         --no-static-motd) SHOW_STATIC=0 ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown option: $1" ;;
@@ -75,7 +65,6 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
         die "root privileges required"
     fi
     extra_args=()
-    (( USER_SPECIFIED )) && extra_args+=(--user "$INSTALL_USER")
     (( ! SHOW_STATIC )) && extra_args+=(--no-static-motd)
     exec sudo --preserve-env=DASHMOTD_REPO,DASHMOTD_REF,DASHMOTD_TARBALL,SUDO_USER \
         bash "$self" "${extra_args[@]}"
@@ -220,7 +209,8 @@ install -m 0755 "$SRC/update.sh" "$PREFIX/update.sh" 2>/dev/null || true
 
 # --- display path (distro-aware) ---------------------------------------------
 # Debian/Ubuntu/Raspberry Pi: /etc/update-motd.d + pam_motd
-# RHEL/Oracle/Arch/others without update-motd.d: /etc/profile.d + bashrc hook
+# RHEL/Oracle/Arch/others without update-motd.d: /etc/profile.d
+# Non-login interactive shells: system-wide /etc/bash.bashrc or /etc/bashrc
 USED_UPDATE_MOTD=0
 USED_PROFILE_D=0
 
@@ -240,7 +230,11 @@ fi
 if (( ! USED_UPDATE_MOTD )) && [[ -d /etc/profile.d ]]; then
     log "installing /etc/profile.d/zzz-dashmotd.sh (login shells)"
     cat > /etc/profile.d/zzz-dashmotd.sh <<'PROFILE'
-# dashmotd — render dashboard (live + collected cache) on login shells
+# dashmotd — render dashboard (live + collected cache) on interactive login shells
+case $- in
+    *i*) ;;
+    *) return 0 ;;
+esac
 if [ -x /opt/dashmotd/bin/dashmotd-render ]; then
     /opt/dashmotd/bin/dashmotd-render
 fi
@@ -252,7 +246,7 @@ fi
 # PAM sanity check (informative)
 for pam in /etc/pam.d/sshd /etc/pam.d/login; do
     if [[ -f "$pam" ]] && ! grep -q 'pam_motd' "$pam"; then
-        warn "$pam has no pam_motd entry — relying on profile.d / bashrc hook"
+        warn "$pam has no pam_motd entry — relying on profile.d / system bashrc hook"
     fi
 done
 
@@ -275,16 +269,11 @@ log "collecting cached section data"
 log "rendering initial dashboard"
 "$PREFIX/bin/dashmotd-render" >/dev/null
 
-# Bashrc hooks for non-login interactive shells (all human users by default)
-if (( USER_SPECIFIED )); then
-    home="$(getent passwd "$INSTALL_USER" | cut -d: -f6 || true)"
-    dashmotd_install_user_hook "$INSTALL_USER" "$home"
-else
-    while IFS=: read -r _uname _uhome; do
-        [[ -n "$_uname" ]] || continue
-        dashmotd_install_user_hook "$_uname" "$_uhome"
-    done < <(dashmotd_list_target_users)
-fi
+# Remove per-user hooks left by older releases, then install system-wide hook
+# for non-login interactive shells (/etc/bash.bashrc or /etc/bashrc).
+log "removing legacy per-user bashrc hooks (if any)"
+dashmotd_remove_legacy_user_hooks
+dashmotd_install_system_hook >/dev/null || true
 
 # Move static /etc/motd before the dashboard (pam prints it after dynamic MOTD).
 # Backup + blank so the text is not duplicated after dashmotd.

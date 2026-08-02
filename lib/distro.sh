@@ -1,6 +1,7 @@
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd distro / package-manager detection
 # Sourced by sections and the installer.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 # DASHMOTD_OS_FAMILY: debian | rhel | arch | suse | unknown
 # DASHMOTD_PKG_MANAGER: apt | dnf | yum | pacman | zypper | unknown

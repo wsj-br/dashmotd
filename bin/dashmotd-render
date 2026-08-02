@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Render the dashmotd dashboard: banner + LAYOUT grid.
 # Live sections (LIVE_SECTIONS) are sampled now; other cells come from
 # cache/sections/ written by dashmotd-collect. Invoked at login / display.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 
@@ -80,7 +81,7 @@ else
     done
     # ASCII unit separator — never appears in printable MOTD text (unlike @).
     us=$'\x1f'
-    merged="$(paste -d "$us" "${paste_args[@]}" | column -ts "$us")"
+    merged="$(paste -d "$us" "${paste_args[@]}" | column -ts "$us" -o "${gray}  ⏐  ${reset}")"
 fi
 
 {

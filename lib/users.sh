@@ -1,7 +1,12 @@
+# dashmotd bashrc-hook helpers — sourced by install.sh, update.sh, uninstall.sh.
+#
+# Non-login interactive shells get the dashboard via a system-wide hook in
+# /etc/bash.bashrc (Debian/Arch/SUSE) or /etc/bashrc (RHEL). Per-user
+# ~/.bashrc / ~/.bashrc.d hooks from older releases are removed on install/update.
+#
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
-# dashmotd user / bashrc-hook helpers — sourced by install.sh, update.sh, uninstall.sh.
 
-# Marker comments delimiting the inlined bashrc block for unwired users.
+# Marker comments delimiting the hook block (system-wide and legacy per-user).
 DASHMOTD_HOOK_BEGIN='# >>> dashmotd hook >>>'
 DASHMOTD_HOOK_END='# <<< dashmotd hook <<<'
 
@@ -9,7 +14,7 @@ DASHMOTD_HOOK_END='# <<< dashmotd hook <<<'
 _dashmotd_hook_body() {
     cat <<'HOOK'
 # dashmotd — render dashboard in non-login interactive shells only
-# (login shells already get it via pam_motd / update-motd.d)
+# (login shells already get it via pam_motd / update-motd.d / profile.d)
 if [[ $- == *i* ]] && ! shopt -q login_shell; then
     if [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
         /opt/dashmotd/bin/dashmotd-render
@@ -18,9 +23,74 @@ fi
 HOOK
 }
 
+# dashmotd_strip_hook_block FILE — remove marker-delimited block from FILE if present
+dashmotd_strip_hook_block() {
+    local file="$1"
+    [[ -f "$file" ]] || return 0
+    if grep -Fq "$DASHMOTD_HOOK_BEGIN" "$file"; then
+        # Markers use #/>/spaces; | is a safe sed address delimiter here.
+        sed -i "\|$DASHMOTD_HOOK_BEGIN|,\\|$DASHMOTD_HOOK_END|d" "$file"
+    fi
+}
+
+# dashmotd_append_hook_block FILE — append marker-delimited hook to FILE
+dashmotd_append_hook_block() {
+    local file="$1"
+    {
+        printf '\n%s\n' "$DASHMOTD_HOOK_BEGIN"
+        _dashmotd_hook_body
+        printf '%s\n' "$DASHMOTD_HOOK_END"
+    } >> "$file"
+}
+
+# dashmotd_system_rcfile — print system-wide bash rc path, or return 1
+dashmotd_system_rcfile() {
+    if [[ -f /etc/bash.bashrc ]]; then
+        printf '%s\n' /etc/bash.bashrc
+        return 0
+    fi
+    if [[ -f /etc/bashrc ]]; then
+        printf '%s\n' /etc/bashrc
+        return 0
+    fi
+    return 1
+}
+
+# dashmotd_install_system_hook [FILE] — idempotent marker block in system rc
+# Optional FILE overrides detection (for tests).
+dashmotd_install_system_hook() {
+    local rcfile="${1:-}"
+    if [[ -z "$rcfile" ]]; then
+        rcfile="$(dashmotd_system_rcfile)" || {
+            warn "no system-wide bashrc found — non-login shells will not show the dashboard"
+            return 1
+        }
+    fi
+    [[ -f "$rcfile" ]] || {
+        warn "system bashrc missing: $rcfile"
+        return 1
+    }
+    dashmotd_strip_hook_block "$rcfile"
+    dashmotd_append_hook_block "$rcfile"
+    log "installing system bashrc hook in $rcfile"
+    printf '%s\n' "$rcfile"
+}
+
+# dashmotd_remove_system_hook — strip marker block from both candidate files
+dashmotd_remove_system_hook() {
+    local f
+    for f in /etc/bash.bashrc /etc/bashrc; do
+        if [[ -f "$f" ]] && grep -Fq "$DASHMOTD_HOOK_BEGIN" "$f"; then
+            log "removing system bashrc hook from $f"
+            dashmotd_strip_hook_block "$f"
+        fi
+    done
+}
+
 # dashmotd_list_target_users — print name:home for human login accounts.
 # Filters by UID_MIN from /etc/login.defs (default 1000), skips root,
 # nologin/false shells, and missing home directories. Dedupes by home.
+# Used only for legacy per-user hook cleanup.
 dashmotd_list_target_users() {
     local uid_min=1000 name uid home shell seen_homes=""
     if [[ -r /etc/login.defs ]]; then
@@ -45,91 +115,35 @@ dashmotd_list_target_users() {
     done < <(getent passwd)
 }
 
-# dashmotd_bashrc_wired HOME — true if ~/.bashrc already sources bashrc.d
-dashmotd_bashrc_wired() {
-    local home="$1" bashrc="$1/.bashrc"
-    [[ -f "$bashrc" ]] && grep -q 'bashrc\.d' "$bashrc"
-}
-
-# dashmotd_write_hook_file HOME OWNER — write ~/.bashrc.d/21-dashmotd.sh
-dashmotd_write_hook_file() {
-    local home="$1" owner="$2"
-    local hook_dir="$home/.bashrc.d"
-    local hook="$hook_dir/21-dashmotd.sh"
-
-    mkdir -p "$hook_dir"
-    _dashmotd_hook_body > "$hook"
-    chown "$owner:" "$hook" 2>/dev/null || true
-    chown "$owner:" "$hook_dir" 2>/dev/null || true
-    printf '%s\n' "$hook"
-}
-
-# dashmotd_remove_bashrc_block HOME — strip marker-delimited block from ~/.bashrc
+# dashmotd_remove_bashrc_block HOME [OWNER] — strip marker block from ~/.bashrc
+# OWNER is unused (kept for call-site compatibility); ownership is not changed.
 dashmotd_remove_bashrc_block() {
-    local home="$1" bashrc="$1/.bashrc" owner="$2"
-    [[ -f "$bashrc" ]] || return 0
-    if grep -Fq "$DASHMOTD_HOOK_BEGIN" "$bashrc"; then
-        # Markers use #/>/spaces; | is a safe sed address delimiter here.
-        sed -i "\|$DASHMOTD_HOOK_BEGIN|,\\|$DASHMOTD_HOOK_END|d" "$bashrc"
-        if [[ -n "${owner:-}" ]]; then
-            chown "$owner:" "$bashrc" 2>/dev/null || true
-        fi
-    fi
+    local home="$1"
+    dashmotd_strip_hook_block "$home/.bashrc"
 }
 
-# dashmotd_upsert_bashrc_block HOME OWNER — idempotent inlined hook in ~/.bashrc
-dashmotd_upsert_bashrc_block() {
-    local home="$1" owner="$2"
-    local bashrc="$home/.bashrc"
-
-    if [[ ! -f "$bashrc" ]]; then
-        # Create a minimal bashrc so the hook has somewhere to live
-        touch "$bashrc"
-        chown "$owner:" "$bashrc" 2>/dev/null || true
-    fi
-
-    dashmotd_remove_bashrc_block "$home" "$owner"
-
-    {
-        printf '\n%s\n' "$DASHMOTD_HOOK_BEGIN"
-        _dashmotd_hook_body
-        printf '%s\n' "$DASHMOTD_HOOK_END"
-    } >> "$bashrc"
-    chown "$owner:" "$bashrc" 2>/dev/null || true
-    printf '%s\n' "$bashrc"
-}
-
-# dashmotd_install_user_hook USER HOME — wire hook via bashrc.d or inlined block
-dashmotd_install_user_hook() {
-    local user="$1" home="$2" path
-
-    if [[ -z "$home" || ! -d "$home" ]]; then
-        warn "could not resolve home for user $user; skipping bashrc hook"
-        return 0
-    fi
-
-    if dashmotd_bashrc_wired "$home"; then
-        path="$(dashmotd_write_hook_file "$home" "$user")"
-        log "installing bashrc hook $path"
-    else
-        path="$(dashmotd_upsert_bashrc_block "$home" "$user")"
-        log "installing bashrc hook block in $path"
-    fi
-}
-
-# dashmotd_remove_user_hook USER HOME — remove file and/or inlined block
+# dashmotd_remove_user_hook USER HOME — remove legacy file and/or inlined block
 dashmotd_remove_user_hook() {
     local user="$1" home="$2"
     local hook="$home/.bashrc.d/21-dashmotd.sh"
 
     if [[ -n "$home" && -f "$hook" ]]; then
-        log "removing bashrc hook $hook"
+        log "removing legacy bashrc hook $hook"
         rm -f "$hook"
     fi
     if [[ -n "$home" && -f "$home/.bashrc" ]] \
         && grep -Fq "$DASHMOTD_HOOK_BEGIN" "$home/.bashrc"
     then
-        log "removing bashrc hook block from $home/.bashrc"
+        log "removing legacy bashrc hook block from $home/.bashrc"
         dashmotd_remove_bashrc_block "$home" "$user"
     fi
+}
+
+# dashmotd_remove_legacy_user_hooks — strip per-user hooks from older releases
+dashmotd_remove_legacy_user_hooks() {
+    local _uname _uhome
+    while IFS=: read -r _uname _uhome; do
+        [[ -n "$_uname" ]] || continue
+        dashmotd_remove_user_hook "$_uname" "$_uhome"
+    done < <(dashmotd_list_target_users)
 }

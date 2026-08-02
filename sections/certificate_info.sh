@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: certificates (TLS expiry via openssl)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -9,7 +10,7 @@ ensure_cache_dir
 
 if ! command -v openssl >/dev/null 2>&1; then
     echo
-    echo 'certificates:'
+    echo "${bold}certificates:${reset}"
     echo '  openssl not available'
     exit 0
 fi
@@ -54,7 +55,7 @@ if [[ "$last_update" != "$today" ]]; then
 fi
 
 echo
-echo 'certificates:'
+echo "${bold}certificates:${reset}"
 if [[ -z "${out:-}" ]]; then
     echo '  none configured'
 else

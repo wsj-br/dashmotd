@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: disks health (SMART attributes)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -8,7 +9,7 @@ source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
 if ! command -v smartctl >/dev/null 2>&1; then
     echo
-    echo 'disks health:'
+    echo "${bold}disks health:${reset}"
     echo '  smartctl not available'
     exit 0
 fi
@@ -99,5 +100,5 @@ while read -r disk; do
 done < <(lsblk -dpno KNAME 2>/dev/null)
 
 echo
-echo 'disks health:'
+echo "${bold}disks health:${reset}"
 printf '%s' "$out" | column -ts'|' | indent

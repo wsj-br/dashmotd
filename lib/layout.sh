@@ -1,6 +1,7 @@
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd layout helpers — sourced by dashmotd-collect and dashmotd-render.
 # Requires: DASHMOTD_ROOT, LAYOUT, LIVE_SECTIONS, and the sections map from config.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 # dashmotd_trim STRING — strip leading/trailing whitespace
 dashmotd_trim() {

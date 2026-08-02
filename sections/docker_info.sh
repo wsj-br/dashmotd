@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # Section: containers (docker ps)
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 # shellcheck source=/dev/null
@@ -8,7 +9,7 @@ source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
 if ! command -v docker >/dev/null 2>&1; then
     echo
-    echo 'containers:'
+    echo "${bold}containers:${reset}"
     echo '  docker not available'
     exit 0
 fi
@@ -40,7 +41,7 @@ for entry in "${containers[@]:-}"; do
 done
 
 echo
-echo 'containers:'
+echo "${bold}containers:${reset}"
 if [[ -z "$out" ]]; then
     echo '  none'
 else

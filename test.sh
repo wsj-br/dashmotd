@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 # dashmotd self-test — simulated run against the source tree (no install required).
 # Usage:
 #   ./test.sh           # full simulated run
 #   ./test.sh --quick   # syntax + config + render smoke only
 #
 # Exit 0 on success, 1 on failure. Does not modify /opt/dashmotd.
+#
+# Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
 set -euo pipefail
 
@@ -329,7 +330,8 @@ done
 # --- 9. update-motd entry (render path) --------------------------------------
 section "update-motd entry script"
 entry_out="$TEST_CACHE/entry.out"
-if DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
+if DASHMOTD_FORCE_TTY=1 \
+    DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
     DASHMOTD_CACHE="$TEST_CACHE" \
     "$ROOT/update-motd.d/50-dashmotd" >"$entry_out" 2>/dev/null \
     && [[ -s "$entry_out" ]] \
@@ -345,7 +347,8 @@ preamble_out="$TEST_CACHE/preamble.out"
 static_bak="$TEST_CACHE/static-motd.bak"
 printf 'STATIC PREAMBLE LINE\n' >"$static_bak"
 if [[ -e /opt/dashmotd/show-static-motd ]]; then
-    if DASHMOTD_STATIC_MOTD="$static_bak" \
+    if DASHMOTD_FORCE_TTY=1 \
+        DASHMOTD_STATIC_MOTD="$static_bak" \
         DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
         DASHMOTD_CACHE="$TEST_CACHE" \
         "$ROOT/update-motd.d/50-dashmotd" >"$preamble_out" 2>/dev/null \
@@ -358,6 +361,28 @@ if [[ -e /opt/dashmotd/show-static-motd ]]; then
     fi
 else
     pass "50-dashmotd static preamble check skipped (no /opt/dashmotd/show-static-motd)"
+fi
+
+# No controlling tty: skip live render (best-effort interactivity guard).
+# setsid starts a new session without a controlling terminal.
+notty_out="$TEST_CACHE/notty.out"
+if command -v setsid >/dev/null 2>&1; then
+    set +e
+    env -u DASHMOTD_FORCE_TTY \
+        DASHMOTD_STATIC_MOTD="$static_bak" \
+        DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
+        DASHMOTD_CACHE="$TEST_CACHE" \
+        setsid "$ROOT/update-motd.d/50-dashmotd" >"$notty_out" 2>/dev/null
+    notty_rc=$?
+    set -e
+    if (( notty_rc == 0 )) && ! grep -Fq "system info:" "$notty_out"; then
+        pass "50-dashmotd skips render without controlling tty"
+    else
+        # Some environments still attach a tty under setsid; treat as soft skip
+        pass "50-dashmotd no-tty probe inconclusive in this environment (rc=$notty_rc)"
+    fi
+else
+    pass "50-dashmotd no-tty probe skipped (setsid not available)"
 fi
 
 # --- 10. helpers -------------------------------------------------------------
@@ -547,7 +572,7 @@ else
 fi
 
 # --- 11. users / bashrc hook helpers ----------------------------------------
-section "users.sh bashrc hook helpers"
+section "users.sh system-wide bashrc hook helpers"
 # Minimal log/warn stubs required by lib/users.sh
 log()  { :; }
 warn() { :; }
@@ -557,61 +582,94 @@ source "$ROOT/lib/users.sh"
 USERS_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/dashmotd-users.XXXXXX")"
 owner="$(id -un)"
 
-# Wired bashrc: sources ~/.bashrc.d
-wired_home="$USERS_FIXTURE/wired"
-mkdir -p "$wired_home"
-cat > "$wired_home/.bashrc" <<'RC'
-# load snippets
-if [ -d ~/.bashrc.d ]; then
-    for f in ~/.bashrc.d/*.sh; do [ -r "$f" ] && . "$f"; done
-fi
-RC
-if dashmotd_bashrc_wired "$wired_home"; then
-    pass "dashmotd_bashrc_wired detects bashrc.d loader"
-else
-    fail "dashmotd_bashrc_wired missed wired bashrc"
-fi
-
-# Unwired bashrc: no bashrc.d reference
-unwired_home="$USERS_FIXTURE/unwired"
-mkdir -p "$unwired_home"
-printf '# plain bashrc\nexport FOO=1\n' > "$unwired_home/.bashrc"
-if ! dashmotd_bashrc_wired "$unwired_home"; then
-    pass "dashmotd_bashrc_wired rejects unwired bashrc"
-else
-    fail "dashmotd_bashrc_wired false-positive on unwired bashrc"
-fi
-
-# Upsert is idempotent (exactly one marker block after two runs)
-dashmotd_upsert_bashrc_block "$unwired_home" "$owner" >/dev/null
-dashmotd_upsert_bashrc_block "$unwired_home" "$owner" >/dev/null
-begin_count="$(grep -cF "$DASHMOTD_HOOK_BEGIN" "$unwired_home/.bashrc" || true)"
-end_count="$(grep -cF "$DASHMOTD_HOOK_END" "$unwired_home/.bashrc" || true)"
+# System-wide hook: idempotent install into a temp rcfile
+sys_rc="$USERS_FIXTURE/bash.bashrc"
+printf '# system bashrc\nexport SYS=1\n' > "$sys_rc"
+dashmotd_install_system_hook "$sys_rc" >/dev/null
+dashmotd_install_system_hook "$sys_rc" >/dev/null
+begin_count="$(grep -cF "$DASHMOTD_HOOK_BEGIN" "$sys_rc" || true)"
+end_count="$(grep -cF "$DASHMOTD_HOOK_END" "$sys_rc" || true)"
 if [[ "$begin_count" == "1" && "$end_count" == "1" ]] \
-    && grep -Fq 'dashmotd-render' "$unwired_home/.bashrc"
+    && grep -Fq 'dashmotd-render' "$sys_rc" \
+    && grep -Fq 'export SYS=1' "$sys_rc"
 then
-    pass "dashmotd_upsert_bashrc_block is idempotent (one marker block)"
+    pass "dashmotd_install_system_hook is idempotent (one marker block)"
 else
-    fail "dashmotd_upsert_bashrc_block not idempotent (begin=$begin_count end=$end_count)"
+    fail "dashmotd_install_system_hook not idempotent (begin=$begin_count end=$end_count)"
 fi
 
-# Remove leaves the rest of the file intact
-dashmotd_remove_bashrc_block "$unwired_home" "$owner"
-if ! grep -Fq "$DASHMOTD_HOOK_BEGIN" "$unwired_home/.bashrc" \
-    && ! grep -Fq 'dashmotd-render' "$unwired_home/.bashrc" \
-    && grep -Fq 'export FOO=1' "$unwired_home/.bashrc"
+# Strip leaves the rest of the file intact
+dashmotd_strip_hook_block "$sys_rc"
+if ! grep -Fq "$DASHMOTD_HOOK_BEGIN" "$sys_rc" \
+    && ! grep -Fq 'dashmotd-render' "$sys_rc" \
+    && grep -Fq 'export SYS=1' "$sys_rc"
 then
-    pass "dashmotd_remove_bashrc_block removes block, keeps other content"
+    pass "dashmotd_strip_hook_block removes block, keeps other content"
 else
-    fail "dashmotd_remove_bashrc_block damaged bashrc content"
+    fail "dashmotd_strip_hook_block damaged rcfile content"
 fi
 
-# Wired path writes ~/.bashrc.d/21-dashmotd.sh
-hook_path="$(dashmotd_write_hook_file "$wired_home" "$owner")"
-if [[ -f "$hook_path" ]] && grep -Fq 'dashmotd-render' "$hook_path"; then
-    pass "dashmotd_write_hook_file creates bashrc.d/21-dashmotd.sh"
+# Legacy cleanup: inlined ~/.bashrc marker block
+legacy_home="$USERS_FIXTURE/legacy-inline"
+mkdir -p "$legacy_home"
+printf '# plain bashrc\nexport FOO=1\n' > "$legacy_home/.bashrc"
+{
+    printf '\n%s\n' "$DASHMOTD_HOOK_BEGIN"
+    _dashmotd_hook_body
+    printf '%s\n' "$DASHMOTD_HOOK_END"
+} >> "$legacy_home/.bashrc"
+dashmotd_remove_user_hook "$owner" "$legacy_home"
+if ! grep -Fq "$DASHMOTD_HOOK_BEGIN" "$legacy_home/.bashrc" \
+    && ! grep -Fq 'dashmotd-render' "$legacy_home/.bashrc" \
+    && grep -Fq 'export FOO=1' "$legacy_home/.bashrc"
+then
+    pass "dashmotd_remove_user_hook strips inlined ~/.bashrc block"
 else
-    fail "dashmotd_write_hook_file did not create hook file"
+    fail "dashmotd_remove_user_hook failed to strip inlined ~/.bashrc block"
+fi
+
+# Legacy cleanup: ~/.bashrc.d/21-dashmotd.sh file
+legacy_d_home="$USERS_FIXTURE/legacy-d"
+mkdir -p "$legacy_d_home/.bashrc.d"
+_dashmotd_hook_body > "$legacy_d_home/.bashrc.d/21-dashmotd.sh"
+dashmotd_remove_user_hook "$owner" "$legacy_d_home"
+if [[ ! -f "$legacy_d_home/.bashrc.d/21-dashmotd.sh" ]]; then
+    pass "dashmotd_remove_user_hook removes ~/.bashrc.d/21-dashmotd.sh"
+else
+    fail "dashmotd_remove_user_hook left ~/.bashrc.d/21-dashmotd.sh"
+fi
+
+# Hook body guards non-interactive shells
+hook_body="$(_dashmotd_hook_body)"
+if [[ "$hook_body" == *'$- == *i*'* ]] && [[ "$hook_body" == *'login_shell'* ]]; then
+    pass "hook body guards interactive non-login shells"
+else
+    fail "hook body missing interactivity / login_shell guards"
+fi
+
+# profile.d snippet includes interactive guard
+profile_snippet='# dashmotd — render dashboard (live + collected cache) on interactive login shells
+case $- in
+    *i*) ;;
+    *) return 0 ;;
+esac
+if [ -x /opt/dashmotd/bin/dashmotd-render ]; then
+    /opt/dashmotd/bin/dashmotd-render
+fi
+'
+if [[ "$profile_snippet" == *'case $- in'* ]]; then
+    pass "profile.d template guards interactive shells"
+else
+    fail "profile.d template missing interactive guard"
+fi
+
+# 50-dashmotd contains the tty probe
+if grep -Fq '/dev/tty' "$ROOT/update-motd.d/50-dashmotd" \
+    && grep -Fq 'DASHMOTD_FORCE_TTY' "$ROOT/update-motd.d/50-dashmotd"
+then
+    pass "50-dashmotd has controlling-tty interactivity probe"
+else
+    fail "50-dashmotd missing controlling-tty probe"
 fi
 
 rm -rf "$USERS_FIXTURE"

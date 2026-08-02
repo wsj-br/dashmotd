@@ -43,13 +43,13 @@ the project tarball, installs into `/opt/dashmotd`, wires up systemd +
 
 > **Development tip:** GitHub’s raw CDN can lag ~5 minutes after a push. If a
 > just-published `install.sh` still looks stale, use a clone/`DASHMOTD_TARBALL`,
-> or temporarily:
-> `curl -fsSL https://cdn.jsdelivr.net/gh/wsj-br/dashmotd@main/install.sh | sudo bash`
+> or fetch via the Contents API (fresher than `raw.githubusercontent.com`):
+> `curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/wsj-br/dashmotd/contents/install.sh?ref=main | sudo bash`
 
 Or install from a local tarball / clone:
 
 ```bash
-# from a git clone (installs bashrc hooks for every human user by default)
+# from a git clone
 sudo ./install.sh
 
 # from a release archive
@@ -70,6 +70,11 @@ From a git clone instead of downloading GitHub:
 sudo ./update.sh
 ```
 
+> **Development tip:** GitHub’s raw CDN can lag ~5 minutes after a push. If a
+> just-published `update.sh` still looks stale, use a clone/`DASHMOTD_TARBALL`,
+> or fetch via the Contents API (fresher than `raw.githubusercontent.com`):
+> `curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/wsj-br/dashmotd/contents/update.sh?ref=main | sudo bash`
+
 Optional overrides: `DASHMOTD_REF=main`, `DASHMOTD_REPO=...`, `DASHMOTD_TARBALL=...`
 (same meaning as for `install.sh`). The updater replaces scripts, systemd units,
 and MOTD hooks, then runs collect + render. Site `config` is preserved — if you
@@ -83,7 +88,6 @@ dual-stack hosts can resolve both families (`ipv6 / ipv4`). A leftover
 
 | Flag / env | Meaning |
 |---|---|
-| `--user NAME` | Restrict the non-login bashrc hook to this user (default: every human user on the system) |
 | `--no-static-motd` | Do not show the old `/etc/motd` text before the dashboard (still blanks it so pam does not print it after) |
 | `DASHMOTD_REPO` | GitHub repo URL used when bootstrapping |
 | `DASHMOTD_REF` | Branch or tag (default `main`) |
@@ -143,10 +147,10 @@ Collect (hourly):
   dashmotd.timer ──► dashmotd.service ──► bin/dashmotd-collect
                                               │
                                               ├─ cache/last_update
-                                              └─ cache/sections/{network,disks,packages,certs,lastupdate}
+                                              └─ cache/sections/*
 
 Render (every login / interactive shell):
-  pam_motd / profile.d / bashrc ──► bin/dashmotd-render
+  pam_motd / profile.d / system bashrc ──► bin/dashmotd-render
                                         │
                                         ├─ live: sysinfo, partitions, docker
                                         ├─ cache/sections/*  (collected cells)
@@ -161,21 +165,25 @@ Render (every login / interactive shell):
   packages, TLS expiry) may also keep their own files under `cache/`.
 - **Render path** (every display): `pam_motd` runs
   `/etc/update-motd.d/50-dashmotd`, which optionally prints the backed-up
-  static `/etc/motd` text first, then calls `dashmotd-render`. The installer
-  blanks `/etc/motd` so pam does not repeat that text after the dashboard.
-  Elsewhere the installer drops `/etc/profile.d/zzz-dashmotd.sh`. For
-  non-login interactive shells (tmux/byobu) the installer also adds a
-  guarded hook for every human user on the system (or only `--user NAME`):
-  if `~/.bashrc` already sources `~/.bashrc.d/*.sh`, it writes
-  `~/.bashrc.d/21-dashmotd.sh`; otherwise it appends a marker-delimited
-  block directly to `~/.bashrc` so the hook runs without inventing a
-  `.bashrc.d` layout. Render always samples `LIVE_SECTIONS` and reads
+  static `/etc/motd` text first, then calls `dashmotd-render` when a
+  controlling terminal is present (skips the live render for non-interactive
+  ssh such as scp/sftp/git — MOTD output would be discarded anyway). The
+  installer blanks `/etc/motd` so pam does not repeat that text after the
+  dashboard. Elsewhere the installer drops `/etc/profile.d/zzz-dashmotd.sh`
+  (interactive login shells only). For **non-login interactive** shells
+  (tmux/byobu panes, `bash` subshells) the installer appends a single
+  marker-delimited hook to the system-wide bash rc file:
+  `/etc/bash.bashrc` (Debian/Ubuntu/Arch/SUSE) or `/etc/bashrc` (RHEL/Oracle
+  Linux/Fedora). That covers every user — present and future — without
+  editing personal `~/.bashrc` files. Install/update also remove any legacy
+  per-user hooks (`~/.bashrc.d/21-dashmotd.sh` or inlined marker blocks)
+  left by older releases. Render always samples `LIVE_SECTIONS` and reads
   everything else from the collect cache.
 
 ```bash
 # >>> dashmotd hook >>>
 # dashmotd — render dashboard in non-login interactive shells only
-# (login shells already get it via pam_motd / update-motd.d)
+# (login shells already get it via pam_motd / update-motd.d / profile.d)
 if [[ $- == *i* ]] && ! shopt -q login_shell; then
     if [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
         /opt/dashmotd/bin/dashmotd-render
@@ -183,6 +191,13 @@ if [[ $- == *i* ]] && ! shopt -q login_shell; then
 fi
 # <<< dashmotd hook <<<
 ```
+
+> **Notes:** On Debian-family systems `/etc/bash.bashrc` is a dpkg conffile;
+> a bash package upgrade may ask whether to keep your local version — keep
+> the dashmotd block. On RHEL-family hosts bash does not read `/etc/bashrc`
+> itself; the stock `/etc/skel/.bashrc` sources it, so users who removed
+> that line from their own `~/.bashrc` will still see the dashboard at login
+> (via pam_motd / profile.d) but not in non-login shells.
 
 ## Configuration
 
@@ -288,10 +303,12 @@ sudo /opt/dashmotd/uninstall.sh
 sudo ./uninstall.sh
 ```
 
-This removes the systemd units, the `update-motd.d` entry, per-user bashrc
-hooks (both `~/.bashrc.d/21-dashmotd.sh` and any inlined marker block in
-`~/.bashrc`), and `/opt/dashmotd`. It re-enables `/etc/update-motd.d/10-uname`
-if it was disabled, and restores `/etc/motd` if a backup was made.
+This removes the systemd units, the `update-motd.d` entry, the
+`/etc/profile.d` snippet (if present), the system-wide bashrc hook from
+`/etc/bash.bashrc` or `/etc/bashrc`, any legacy per-user hooks
+(`~/.bashrc.d/21-dashmotd.sh` or inlined marker blocks in `~/.bashrc`), and
+`/opt/dashmotd`. It re-enables `/etc/update-motd.d/10-uname` if it was
+disabled, and restores `/etc/motd` if a backup was made.
 
 ## License
 
