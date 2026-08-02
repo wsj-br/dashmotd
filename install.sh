@@ -20,6 +20,7 @@ INSTALL_USER="${SUDO_USER:-${USER:-}}"
 # the dynamic MOTD), and show the backup before the dashboard via 50-dashmotd.
 SHOW_STATIC=1
 
+# Default repo for curl|bash bootstrap (must match the published GitHub repo).
 DASHMOTD_REPO="${DASHMOTD_REPO:-https://github.com/wsj-br/dashmotd}"
 DASHMOTD_REF="${DASHMOTD_REF:-main}"
 
