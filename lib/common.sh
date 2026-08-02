@@ -24,6 +24,8 @@ fi
 
 # shellcheck source=/dev/null
 source "$DASHMOTD_ROOT/lib/colors.sh"
+# shellcheck source=/dev/null
+source "$DASHMOTD_ROOT/lib/column.sh"
 
 # ensure_cache_dir — create the cache directory if missing
 ensure_cache_dir() {

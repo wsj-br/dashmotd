@@ -31,5 +31,5 @@ echo "${bold}partitions usage:${reset}"
 if [[ -z "$out" ]]; then
     echo '  none'
 else
-    printf '%s' "$out" | column -ts'|' | indent
+    printf '%s' "$out" | dashmotd_column '|' | indent
 fi

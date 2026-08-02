@@ -9,13 +9,13 @@
 - `systemd` recommended (hourly collect timer); without it, run `dashmotd-collect` from cron
 - On Debian-family systems: `pam_motd` + `/etc/update-motd.d` (usual default). Elsewhere the installer falls back to `/etc/profile.d`
 
-**Required commands:** `bash`, `column`, `paste`, `free`, `awk`, `sed`, `grep`, `mktemp`
+**Required commands:** `bash`, `paste`, `free`, `awk`, `sed`, `grep`, `mktemp`
 
-**Recommended** (sections degrade gracefully if missing): `smartmontools` (`smartctl`), `openssl`, `curl` or `wget`, `figlet` (+ `toilet-fonts` on Debian for the mono9 font), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
+**Recommended** (sections degrade gracefully if missing): `smartmontools` (`smartctl`), `openssl`, `curl` or `wget`, `figlet` (dashmotd bundles the `mono9` font), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
 
 ```bash
 # Debian / Ubuntu / Raspberry Pi / Zorin
-sudo apt-get install -y smartmontools openssl wget curl figlet toilet-fonts
+sudo apt-get install -y smartmontools openssl wget curl figlet
 
 # RHEL / Oracle Linux / Rocky / Alma / Fedora
 sudo dnf install -y smartmontools openssl wget curl figlet

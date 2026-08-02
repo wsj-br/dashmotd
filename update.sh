@@ -181,7 +181,7 @@ source "$SRC/lib/users.sh"
 # shellcheck source=/dev/null
 source "$SRC/lib/site_config.sh"
 
-mkdir -p "$PREFIX"/{bin,lib,sections,cache,cache/sections,update-motd.d,systemd}
+mkdir -p "$PREFIX"/{bin,lib,sections,cache,cache/sections,update-motd.d,systemd,share/figlet}
 
 dashmotd_install_site_config "$SRC/config" "$PREFIX"
 
@@ -194,6 +194,9 @@ fi
 install -m 0755 "$SRC"/bin/* "$PREFIX/bin/"
 install -m 0644 "$SRC"/lib/*.sh "$PREFIX/lib/"
 chmod 0755 "$PREFIX/lib/cpu.sh"
+if [[ -d "$SRC/share/figlet" ]]; then
+    install -m 0644 "$SRC"/share/figlet/* "$PREFIX/share/figlet/"
+fi
 # Replace section scripts; drop retired names from older releases.
 install -m 0755 "$SRC"/sections/* "$PREFIX/sections/"
 rm -f "$PREFIX/sections/last_execution.sh"

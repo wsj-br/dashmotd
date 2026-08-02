@@ -144,7 +144,7 @@ need_cmd() {
 }
 
 missing=()
-for c in bash column paste free awk sed grep mktemp; do
+for c in bash paste free awk sed grep mktemp; do
     need_cmd "$c" || missing+=("$c")
 done
 # Recommended (sections degrade gracefully without them)
@@ -164,12 +164,12 @@ fi
 
 if (( ${#missing[@]} > 0 )); then
     case "$DASHMOTD_PKG_MANAGER" in
-        apt)    hint="apt-get install -y bsdextrautils util-linux procps" ;;
+        apt)    hint="apt-get install -y util-linux procps" ;;
         dnf)    hint="dnf install -y util-linux procps-ng" ;;
         yum)    hint="yum install -y util-linux procps-ng" ;;
         pacman) hint="pacman -S --needed util-linux procps-ng" ;;
         zypper) hint="zypper install -y util-linux procps" ;;
-        *)      hint="install: util-linux procps column paste" ;;
+        *)      hint="install: util-linux procps paste awk" ;;
     esac
     die "missing required commands: ${missing[*]}  (try: ${hint})"
 fi
@@ -177,7 +177,7 @@ if (( ${#optional_missing[@]} > 0 )); then
     warn "optional tools missing (sections will degrade): ${optional_missing[*]}"
     case "$DASHMOTD_PKG_MANAGER" in
         apt)
-            warn "hint: apt-get install -y smartmontools openssl wget curl figlet toilet-fonts"
+            warn "hint: apt-get install -y smartmontools openssl wget curl figlet"
             ;;
         dnf|yum)
             warn "hint: ${DASHMOTD_PKG_MANAGER} install -y smartmontools openssl wget curl figlet"
@@ -193,7 +193,7 @@ fi
 
 # --- install files -----------------------------------------------------------
 log "installing to $PREFIX"
-mkdir -p "$PREFIX"/{bin,lib,sections,cache,update-motd.d,systemd}
+mkdir -p "$PREFIX"/{bin,lib,sections,cache,update-motd.d,systemd,share/figlet}
 # shellcheck source=/dev/null
 source "$SRC/lib/site_config.sh"
 dashmotd_install_site_config "$SRC/config" "$PREFIX"
@@ -207,6 +207,9 @@ install -m 0755 "$SRC"/bin/* "$PREFIX/bin/"
 install -m 0644 "$SRC"/lib/*.sh "$PREFIX/lib/"
 # cpu.sh must be executable
 chmod 0755 "$PREFIX/lib/cpu.sh"
+if [[ -d "$SRC/share/figlet" ]]; then
+    install -m 0644 "$SRC"/share/figlet/* "$PREFIX/share/figlet/"
+fi
 install -m 0755 "$SRC"/sections/* "$PREFIX/sections/"
 install -m 0755 "$SRC/update-motd.d/50-dashmotd" "$PREFIX/update-motd.d/50-dashmotd"
 install -m 0644 "$SRC/systemd/dashmotd.service" "$PREFIX/systemd/dashmotd.service"

@@ -101,4 +101,4 @@ done < <(lsblk -dpno KNAME 2>/dev/null)
 
 echo
 echo "${bold}disks health:${reset}"
-printf '%s' "$out" | column -ts'|' | indent
+printf '%s' "$out" | dashmotd_column '|' | indent

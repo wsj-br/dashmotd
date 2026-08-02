@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Generate a hostname banner with figlet -f mono9 into cache/banner.
+# Prefers the bundled share/figlet/mono9.tlf (RHEL/OL figlet packages omit it).
 #
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
@@ -11,15 +12,30 @@ mkdir -p "$CACHE"
 
 host="$(hostname -s 2>/dev/null || hostname)"
 out="$CACHE/banner"
+bundled_dir="$ROOT/share/figlet"
 
-if command -v figlet >/dev/null 2>&1 && figlet -f mono9 "$host" >/dev/null 2>&1; then
-    figlet -f mono9 "$host" > "$out"
-else
+write_plain() {
     {
         echo
         echo "  ${host}"
         echo
     } > "$out"
+}
+
+if ! command -v figlet >/dev/null 2>&1; then
+    write_plain
+    printf '%s\n' "$out"
+    exit 0
+fi
+
+if [[ -f "$bundled_dir/mono9.tlf" ]] \
+    && figlet -d "$bundled_dir" -f mono9 "$host" >/dev/null 2>&1
+then
+    figlet -d "$bundled_dir" -f mono9 "$host" > "$out"
+elif figlet -f mono9 "$host" >/dev/null 2>&1; then
+    figlet -f mono9 "$host" > "$out"
+else
+    write_plain
 fi
 
 printf '%s\n' "$out"

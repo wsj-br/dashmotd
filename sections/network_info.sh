@@ -93,4 +93,4 @@ echo "${bold}network:${reset}"
 {
     echo -e "public ip|${public_ip:-unknown}"
     echo -e "private ip|${private_ip:-unknown}"
-} | column -ts'|' | indent
+} | dashmotd_column '|' | indent

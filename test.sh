@@ -50,11 +50,13 @@ for path in \
     config \
     lib/common.sh \
     lib/colors.sh \
+    lib/column.sh \
     lib/cpu.sh \
     lib/distro.sh \
     lib/layout.sh \
     lib/site_config.sh \
     lib/users.sh \
+    share/figlet/mono9.tlf \
     update-motd.d/50-dashmotd \
     systemd/dashmotd.service \
     systemd/dashmotd.timer \
@@ -523,12 +525,13 @@ fi
 
 # Unit-separator merge: @ in section text must not split columns
 section "merge delimiter (@ safety)"
-us=$'\x1f'
+# shellcheck source=/dev/null
+source "$ROOT/lib/column.sh"
 merge_tmp="$TEST_CACHE/merge"
 mkdir -p "$merge_tmp"
 printf 'user@host.example left\n' > "$merge_tmp/col1"
 printf 'right column\n' > "$merge_tmp/col2"
-merged="$(paste -d "$us" "$merge_tmp/col1" "$merge_tmp/col2" | column -ts "$us")"
+merged="$(dashmotd_merge_columns "$merge_tmp/col1" "$merge_tmp/col2")"
 if [[ "$merged" == *'user@host.example'* ]] \
     && [[ "$merged" == *'right column'* ]] \
     && [[ "$merged" != *$'\x1f'* ]]
@@ -536,6 +539,48 @@ then
     pass "unit-separator merge keeps @ intact"
 else
     fail "unit-separator merge mangled @ or failed to merge"
+fi
+
+# ANSI-aware column: colored and plain rows must share the same gutter
+section "ANSI-aware column alignment"
+ansi_tmp="$TEST_CACHE/ansi-col"
+mkdir -p "$ansi_tmp"
+{
+    printf '%s\n' $'\e[1;32m1%\e[0m|cpu|\e[1;32m0.01\e[0m|load'
+    printf '%s\n' '5.15|kernel|91|tasks'
+} | dashmotd_column '|' > "$ansi_tmp/table"
+# Strip CSI, then ensure "cpu" and "kernel" start at the same column
+cpu_col="$(sed 's/\x1b\[[0-9;]*m//g' "$ansi_tmp/table" | awk -F'  +' 'NR==1{print index($0,"cpu")}')"
+kern_col="$(sed 's/\x1b\[[0-9;]*m//g' "$ansi_tmp/table" | awk 'NR==2{print index($0,"kernel")}')"
+if [[ -n "$cpu_col" && "$cpu_col" == "$kern_col" && "$cpu_col" -gt 1 ]]; then
+    pass "ANSI-aware column aligns labels (col=$cpu_col)"
+else
+    fail "ANSI-aware column misaligned (cpu@$cpu_col kernel@$kern_col)"
+fi
+printf '%s\n' $'\e[1;32m12%\e[0m  memory' > "$ansi_tmp/left"
+printf '%s\n' 'network right' > "$ansi_tmp/right"
+printf '%s\n' 'plain left line!!' >> "$ansi_tmp/left"
+printf '%s\n' 'network again' >> "$ansi_tmp/right"
+merged_ansi="$(dashmotd_merge_columns "$ansi_tmp/left" "$ansi_tmp/right")"
+# After stripping ANSI, both "network" tokens should start at the same index
+n1="$(printf '%s\n' "$merged_ansi" | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR==1{print index($0,"network")}')"
+n2="$(printf '%s\n' "$merged_ansi" | sed 's/\x1b\[[0-9;]*m//g' | awk 'NR==2{print index($0,"network")}')"
+if [[ -n "$n1" && "$n1" == "$n2" && "$n1" -gt 1 ]]; then
+    pass "ANSI-aware merge aligns right column (col=$n1)"
+else
+    fail "ANSI-aware merge misaligned (n1=$n1 n2=$n2)"
+fi
+
+# Bundled mono9 font is usable when figlet is present
+section "bundled mono9 figlet font"
+if command -v figlet >/dev/null 2>&1; then
+    if figlet -d "$ROOT/share/figlet" -f mono9 test >/dev/null 2>&1; then
+        pass "figlet loads bundled mono9"
+    else
+        fail "figlet cannot load bundled mono9"
+    fi
+else
+    pass "figlet not installed — skipped bundled mono9 check"
 fi
 
 # Partition awk/read path keeps mount targets containing spaces

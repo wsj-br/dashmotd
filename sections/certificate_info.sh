@@ -59,5 +59,5 @@ echo "${bold}certificates:${reset}"
 if [[ -z "${out:-}" ]]; then
     echo '  none configured'
 else
-    printf '%s\n' "$out" | column -t -s '|' | indent
+    printf '%s\n' "$out" | dashmotd_column '|' | indent
 fi

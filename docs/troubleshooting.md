@@ -4,6 +4,7 @@
 
 - [Why is `update.sh` or `install.sh` not picking up the latest GitHub commit?](#why-is-updatesh-or-installsh-not-picking-up-the-latest-github-commit)
 - [Why is the hostname banner using plain text instead of ASCII art?](#why-is-the-hostname-banner-using-plain-text-instead-of-ascii-art)
+- [Why are the two columns misaligned (colors push the right column around)?](#why-are-the-two-columns-misaligned-colors-push-the-right-column-around)
 - [Why are column vertical separators (`│`) showing gaps or broken characters?](#why-are-column-vertical-separators--showing-gaps-or-broken-characters)
 - [Why are disk SMART health or package updates missing or empty?](#why-are-disk-smart-health-or-package-updates-missing-or-empty)
 - [Why is the dashboard rendered twice or not displaying in tmux / subshells?](#why-is-the-dashboard-rendered-twice-or-not-displaying-in-tmux--subshells)
@@ -31,13 +32,13 @@ GitHub’s `raw.githubusercontent.com` CDN can lag ~5 minutes after a push. If a
 
 ## Why is the hostname banner using plain text instead of ASCII art?
 
-`dashmotd-banner` uses `figlet` with the `mono9` font (provided by `toilet-fonts` on Debian/Ubuntu). If `figlet` or font packages were missing when the update or installation ran, it wrote a plain hostname fallback to `cache/banner`.
+`dashmotd-banner` uses `figlet` with the bundled `share/figlet/mono9.tlf` font (RHEL/Oracle `figlet` packages do not ship `mono9`). If `figlet` was missing when the update or installation ran, it wrote a plain hostname fallback to `cache/banner`.
 
-To generate the ASCII art banner, install the missing packages and run the banner generator:
+Install `figlet` and regenerate the cached banner:
 
 ```bash
 # Debian / Ubuntu
-sudo apt-get install -y figlet toilet-fonts
+sudo apt-get install -y figlet
 
 # RHEL / Fedora / Oracle Linux
 sudo dnf install -y figlet
@@ -47,6 +48,14 @@ sudo pacman -S figlet
 
 # Regenerate the cached banner:
 sudo /opt/dashmotd/bin/dashmotd-banner
+```
+
+## Why are the two columns misaligned (colors push the right column around)?
+
+Older `column` from util-linux (for example **2.32** on Oracle Linux / RHEL 8) counts ANSI color escape bytes as visible width. dashmotd formats tables with an ANSI-aware helper instead. If you still see skewed columns after an old install, update:
+
+```bash
+sudo /opt/dashmotd/update.sh
 ```
 
 ## Why are column vertical separators (`│`) showing gaps or broken characters?

@@ -45,6 +45,6 @@ echo "${bold}containers:${reset}"
 if [[ -z "$out" ]]; then
     echo '  none'
 else
-    # Ensure trailing newline for column
-    printf '%s\n' "$out" | column -ts'|' | indent
+    # Ensure trailing newline for column formatter
+    printf '%s\n' "$out" | dashmotd_column '|' | indent
 fi

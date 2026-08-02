@@ -42,4 +42,4 @@ echo "${bold}system info:${reset}"
     for line in "${lines[@]}"; do
         echo -e "$line"
     done
-} | column -ts'|' | indent
+} | dashmotd_column '|' | indent
