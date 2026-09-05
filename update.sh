@@ -210,9 +210,11 @@ install -m 0755 "$SRC/update.sh" "$PREFIX/update.sh"
 if [[ -d "$MOTD_DIR" ]]; then
     log "updating $MOTD_DIR/50-dashmotd"
     install -m 0755 "$PREFIX/update-motd.d/50-dashmotd" "$MOTD_DIR/50-dashmotd"
-fi
-
-if [[ -d /etc/profile.d && -e /etc/profile.d/zzz-dashmotd.sh ]]; then
+    if [[ -e /etc/profile.d/zzz-dashmotd.sh ]]; then
+        log "removing stale /etc/profile.d/zzz-dashmotd.sh"
+        rm -f /etc/profile.d/zzz-dashmotd.sh
+    fi
+elif [[ -d /etc/profile.d && -e /etc/profile.d/zzz-dashmotd.sh ]]; then
     log "refreshing /etc/profile.d/zzz-dashmotd.sh"
     cat > /etc/profile.d/zzz-dashmotd.sh <<'PROFILE'
 # dashmotd — render dashboard (live + collected cache) on interactive login shells

@@ -219,7 +219,8 @@ install -m 0755 "$SRC/uninstall.sh" "$PREFIX/uninstall.sh" 2>/dev/null || true
 install -m 0755 "$SRC/update.sh" "$PREFIX/update.sh" 2>/dev/null || true
 
 # --- display path (distro-aware) ---------------------------------------------
-# Debian/Ubuntu/Raspberry Pi: /etc/update-motd.d + pam_motd
+# Debian/Ubuntu/Raspberry Pi: /etc/update-motd.d + pam_motd. The hook must
+# work without /dev/tty because pam_motd runs it before the SSH tty is attached.
 # RHEL/Oracle/Arch/others without update-motd.d: /etc/profile.d
 # Non-login interactive shells: system-wide /etc/bash.bashrc or /etc/bashrc
 USED_UPDATE_MOTD=0
@@ -235,6 +236,13 @@ if [[ -d "$MOTD_DIR" ]]; then
     fi
 else
     warn "$MOTD_DIR not present — skipping update-motd integration"
+fi
+
+# Remove a dashmotd-owned fallback left by an older install. Keeping both
+# paths active would display the dashboard twice on login.
+if (( USED_UPDATE_MOTD )) && [[ -e /etc/profile.d/zzz-dashmotd.sh ]]; then
+    log "removing stale /etc/profile.d/zzz-dashmotd.sh"
+    rm -f /etc/profile.d/zzz-dashmotd.sh
 fi
 
 # profile.d for login shells on distros without update-motd.d

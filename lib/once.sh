@@ -19,9 +19,15 @@ dashmotd_once_tty() {
         return 0
     fi
     if [ -c /dev/tty ]; then
-        tty < /dev/tty 2>/dev/null && return 0
+        tty_path=$(tty < /dev/tty 2>/dev/null || true)
+        case "$tty_path" in
+            /dev/*) printf '%s\n' "$tty_path"; return 0 ;;
+        esac
     fi
-    tty 2>/dev/null || true
+    tty_path=$(tty 2>/dev/null || true)
+    case "$tty_path" in
+        /dev/*) printf '%s\n' "$tty_path" ;;
+    esac
 }
 
 # dashmotd_once_sid — print kernel session id, or empty

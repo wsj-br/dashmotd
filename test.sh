@@ -334,7 +334,8 @@ done
 # --- 9. update-motd entry (render path) --------------------------------------
 section "update-motd entry script"
 entry_out="$TEST_CACHE/entry.out"
-if DASHMOTD_FORCE_TTY=1 \
+if env -i \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
     DASHMOTD_CACHE="$TEST_CACHE" \
     "$ROOT/update-motd.d/50-dashmotd" >"$entry_out" 2>/dev/null \
@@ -351,7 +352,8 @@ preamble_out="$TEST_CACHE/preamble.out"
 static_bak="$TEST_CACHE/static-motd.bak"
 printf 'STATIC PREAMBLE LINE\n' >"$static_bak"
 if [[ -e /opt/dashmotd/show-static-motd ]]; then
-    if DASHMOTD_FORCE_TTY=1 \
+    if env -i \
+        PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
         DASHMOTD_STATIC_MOTD="$static_bak" \
         DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
         DASHMOTD_CACHE="$TEST_CACHE" \
@@ -367,26 +369,19 @@ else
     pass "50-dashmotd static preamble check skipped (no /opt/dashmotd/show-static-motd)"
 fi
 
-# No controlling tty: skip live render (best-effort interactivity guard).
-# setsid starts a new session without a controlling terminal.
-notty_out="$TEST_CACHE/notty.out"
-if command -v setsid >/dev/null 2>&1; then
-    set +e
-    env -u DASHMOTD_FORCE_TTY \
-        DASHMOTD_STATIC_MOTD="$static_bak" \
-        DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
-        DASHMOTD_CACHE="$TEST_CACHE" \
-        setsid "$ROOT/update-motd.d/50-dashmotd" >"$notty_out" 2>/dev/null
-    notty_rc=$?
-    set -e
-    if (( notty_rc == 0 )) && ! grep -Fq "system info:" "$notty_out"; then
-        pass "50-dashmotd skips render without controlling tty"
-    else
-        # Some environments still attach a tty under setsid; treat as soft skip
-        pass "50-dashmotd no-tty probe inconclusive in this environment (rc=$notty_rc)"
-    fi
+# pam_motd invokes update-motd scripts through env -i before an SSH tty is
+# attached. This must still render the dashboard.
+pam_out="$TEST_CACHE/pam-env.out"
+if env -i \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
+    DASHMOTD_CACHE="$TEST_CACHE" \
+    "$ROOT/update-motd.d/50-dashmotd" >"$pam_out" 2>/dev/null \
+    && grep -Fq "system info:" "$pam_out"
+then
+    pass "50-dashmotd renders from pam_motd-style clean environment"
 else
-    pass "50-dashmotd no-tty probe skipped (setsid not available)"
+    fail "50-dashmotd failed from pam_motd-style clean environment"
 fi
 
 # --- 10. helpers -------------------------------------------------------------
@@ -708,14 +703,28 @@ else
     fail "profile.d template missing interactive / once-display guards"
 fi
 
-# 50-dashmotd contains the tty probe and once-guard
-if grep -Fq '/dev/tty' "$ROOT/update-motd.d/50-dashmotd" \
-    && grep -Fq 'DASHMOTD_FORCE_TTY' "$ROOT/update-motd.d/50-dashmotd" \
+# 50-dashmotd must be usable from pam_motd's clean environment and retain
+# the once-guard. pam_motd runs this hook before an SSH tty is attached.
+if ! grep -Fq '/dev/tty' "$ROOT/update-motd.d/50-dashmotd" \
     && grep -Fq 'once.sh' "$ROOT/update-motd.d/50-dashmotd"
 then
-    pass "50-dashmotd has controlling-tty probe and once-guard"
+    pass "50-dashmotd is PAM-compatible and has once-guard"
 else
-    fail "50-dashmotd missing controlling-tty probe or once-guard"
+    fail "50-dashmotd still requires a controlling tty or lacks once-guard"
+fi
+
+# The once helper must not turn `tty`'s diagnostic text into a shared stamp.
+# Use a separate process session so this remains valid when tests run in a tty.
+if command -v setsid >/dev/null 2>&1 \
+    && once_tty_out_value="$(setsid bash -c '
+        source "$1/lib/once.sh"
+        dashmotd_once_tty
+    ' bash "$ROOT" </dev/null 2>/dev/null)" \
+    && [[ -z "$once_tty_out_value" ]]
+then
+    pass "once helper ignores the not-a-tty diagnostic"
+else
+    fail "once helper returned a non-device tty key without a tty"
 fi
 
 # once.sh: second claim on same tty/session skips; FORCE bypasses

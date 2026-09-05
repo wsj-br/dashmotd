@@ -25,10 +25,10 @@ Render (every login / interactive shell):
   packages, TLS expiry) may also keep their own files under `cache/`.
 - **Render path** (every display): `pam_motd` runs
   `/etc/update-motd.d/50-dashmotd`, which optionally prints the backed-up
-  static `/etc/motd` text first, then calls `dashmotd-render` when a
-  controlling terminal is present (skips the live render for non-interactive
-  ssh such as scp/sftp/git — MOTD output would be discarded anyway). The
-  installer blanks `/etc/motd` so pam does not repeat that text after the
+  static `/etc/motd` text first, then calls `dashmotd-render`. The hook cannot
+  use `/dev/tty` to distinguish interactive SSH from non-interactive SSH:
+  Debian runs update-motd scripts before the session terminal is attached.
+  The installer blanks `/etc/motd` so pam does not repeat that text after the
   dashboard. Elsewhere the installer drops `/etc/profile.d/zzz-dashmotd.sh`
   (interactive login shells only). For **non-login interactive** shells
   (tmux/byobu panes, `bash` subshells) the installer appends a single
@@ -79,4 +79,3 @@ panes (new pts). Bypass with `DASHMOTD_FORCE=1` or a direct
 ./test.sh          # full simulated run
 ./test.sh --quick  # syntax + config + render smoke only
 ```
-

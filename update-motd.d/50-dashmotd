@@ -6,8 +6,9 @@
 # the dashboard; we print the backup here so it appears before instead.
 #
 # pam_motd also runs this for non-interactive sessions (scp/sftp/git-over-ssh).
-# Skip the live render when there is no controlling terminal — those sessions
-# discard MOTD output anyway, and rendering (e.g. docker ps) is wasted work.
+# Do not require a controlling terminal here: Debian runs update-motd scripts
+# through pam_motd before the SSH session's terminal is attached, even for an
+# interactive login. The caller decides whether MOTD output is displayed.
 #
 # Also skip when this tty/session already showed the dashboard (nested shells,
 # sudo su -) — see lib/once.sh.
@@ -22,15 +23,6 @@ export LANG LC_ALL
 STATIC="${DASHMOTD_STATIC_MOTD:-/etc/motd.dashmotd.bak}"
 RENDER="${DASHMOTD_RENDER:-/opt/dashmotd/bin/dashmotd-render}"
 FALLBACK="${DASHMOTD_MOTD:-/opt/dashmotd/cache/motd}"
-
-# Best-effort interactivity probe: interactive ssh/console sessions have a
-# controlling tty by the time pam_motd runs; non-interactive ones typically do not.
-# DASHMOTD_FORCE_TTY=1 bypasses the probe (used by test.sh / manual previews).
-if [ -z "${DASHMOTD_FORCE_TTY:-}" ]; then
-    if ! (exec 3<>/dev/tty) 2>/dev/null; then
-        exit 0
-    fi
-fi
 
 # Resolve lib/once.sh next to the render binary (or DASHMOTD_ONCE_LIB override).
 ONCE_LIB="${DASHMOTD_ONCE_LIB:-}"
