@@ -295,10 +295,17 @@ log "rendering initial dashboard"
 "$PREFIX/bin/dashmotd-render" >/dev/null
 
 # Remove per-user hooks left by older releases, then install system-wide hook
-# for non-login interactive shells (/etc/bash.bashrc or /etc/bashrc).
+# for all interactive shells (/etc/bash.bashrc or /etc/bashrc).
 log "removing legacy per-user bashrc hooks (if any)"
 dashmotd_remove_legacy_user_hooks
 dashmotd_install_system_hook >/dev/null || true
+
+# Clean stale once-guard stamps from /tmp that may block rendering after
+# updating from buggy versions (e.g., the literal "not_a_tty" stamp).
+if [[ -d /tmp/dashmotd-once ]]; then
+    log "clearing stale once-guard stamps"
+    rm -rf /tmp/dashmotd-once
+fi
 
 # Move static /etc/motd before the dashboard (pam prints it after dynamic MOTD).
 # Backup + blank so the text is not duplicated after dashmotd.

@@ -248,6 +248,13 @@ log "removing legacy per-user bashrc hooks (if any)"
 dashmotd_remove_legacy_user_hooks
 dashmotd_install_system_hook >/dev/null || true
 
+# Clean stale once-guard stamps from /tmp that may block rendering after
+# updating from buggy versions (e.g., the literal "not_a_tty" stamp).
+if [[ -d /tmp/dashmotd-once ]]; then
+    log "clearing stale once-guard stamps"
+    rm -rf /tmp/dashmotd-once
+fi
+
 log "generating hostname banner"
 "$PREFIX/bin/dashmotd-banner" >/dev/null 2>&1 || true
 log "collecting cached section data"

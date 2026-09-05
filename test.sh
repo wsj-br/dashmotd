@@ -681,16 +681,15 @@ else
     fail "dashmotd_remove_user_hook left ~/.bashrc.d/21-dashmotd.sh"
 fi
 
-# Hook body: login shells mark SHOWN; non-login render once with AUTO
+# Hook body: interactive shells render once with AUTO and mark SHOWN
 hook_body="$(_dashmotd_hook_body)"
 if [[ "$hook_body" == *'$- == *i*'* ]] \
-    && [[ "$hook_body" == *'login_shell'* ]] \
     && [[ "$hook_body" == *'DASHMOTD_SHOWN'* ]] \
     && [[ "$hook_body" == *'DASHMOTD_AUTO=1'* ]]
 then
-    pass "hook body marks SHOWN and uses DASHMOTD_AUTO for non-login shells"
+    pass "hook body marks SHOWN and uses DASHMOTD_AUTO for interactive shells"
 else
-    fail "hook body missing SHOWN / AUTO / login_shell guards"
+    fail "hook body missing SHOWN / AUTO / interactive guards"
 fi
 
 # profile.d snippet includes interactive + once guards
