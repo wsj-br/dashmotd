@@ -1,7 +1,7 @@
 # dashmotd
 
-A two-column system dashboard delivered through the standard Linux
-`update-motd` framework (`/etc/update-motd.d` + `pam_motd`).
+A two-column system dashboard displayed on login via system-wide bashrc hooks
+(`/etc/bash.bashrc` or `/etc/bashrc`).
 
 dashmotd separates **collect** (slow / privilege-sensitive data, hourly) from
 **render** (login always composes the grid from live samples + collected
@@ -18,10 +18,10 @@ reflect current status.
 
 ## Prerequisites
 
-- A supported Linux distribution (see [Supported distributions](../README.md#supported-distributions))
-- Root privileges to install (the installer configures systemd and MOTD hooks)
+- A supported Linux distribution (see [Supported distributions](#supported-distributions))
+- Root privileges to install (the installer configures systemd and bashrc hooks)
 - `systemd` recommended (hourly collect timer); without it, run `dashmotd-collect` from cron
-- On Debian-family systems: `pam_motd` + `/etc/update-motd.d` (usual default). Elsewhere the installer falls back to `/etc/profile.d`
+- Bash as the interactive shell (the dashboard renders from `/etc/bash.bashrc` or `/etc/bashrc`)
 
 **Required commands:** `bash`, `paste`, `free`, `awk`, `sed`, `grep`, `mktemp`
 
@@ -69,8 +69,6 @@ sudo /opt/dashmotd/update.sh
 Preview the dashboard:
 
 ```bash
-run-parts /etc/update-motd.d/
-# or
 /opt/dashmotd/bin/dashmotd-render
 ```
 
@@ -97,12 +95,12 @@ sudo /opt/dashmotd/bin/dashmotd-collect
 
 ## Supported distributions
 
-| Family | Examples | Package manager | Login display |
+| Family | Examples | Package manager | System bashrc |
 |---|---|---|---|
-| Debian | Debian, Ubuntu, Zorin, Raspberry Pi OS, Mint, Pop!_OS | `apt` | `/etc/update-motd.d` + pam_motd |
-| RHEL | Oracle Linux, RHEL, Rocky, Alma, Fedora, Amazon Linux | `dnf` / `yum` | `/etc/profile.d` (if no update-motd.d) |
-| Arch | Arch, Manjaro, EndeavourOS | `pacman` (+ `checkupdates`) | `/etc/profile.d` |
-| SUSE | openSUSE, SLES | `zypper` | `/etc/profile.d` |
+| Debian | Debian, Ubuntu, Zorin, Raspberry Pi OS, Mint, Pop!_OS | `apt` | `/etc/bash.bashrc` |
+| RHEL | Oracle Linux, RHEL, Rocky, Alma, Fedora, Amazon Linux | `dnf` / `yum` | `/etc/bashrc` |
+| Arch | Arch, Manjaro, EndeavourOS | `pacman` (+ `checkupdates`) | `/etc/bash.bashrc` |
+| SUSE | openSUSE, SLES | `zypper` | `/etc/bash.bashrc` |
 
 Package manager is auto-detected (`PKG_MANAGER=auto`); override in `config` if needed.
 
