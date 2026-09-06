@@ -11,23 +11,40 @@
 #
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
+# dashmotd_once_tty_ok — 0 if PATH is a concrete tty device (not /dev/tty).
+# Bare /dev/tty is a synonym for "controlling terminal" and collapses every
+# session onto one stamp key; reject it so callers fail open instead.
+dashmotd_once_tty_ok() {
+    case "$1" in
+        /dev/pts/*|/dev/tty[0-9]*|/dev/ttyS*|/dev/ttyUSB*|/dev/ttyAMA*|/dev/ttyACM*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # dashmotd_once_tty — print controlling tty path, or empty
 # DASHMOTD_ONCE_TTY overrides (tests).
 dashmotd_once_tty() {
     if [ -n "${DASHMOTD_ONCE_TTY:-}" ]; then
-        printf '%s\n' "$DASHMOTD_ONCE_TTY"
+        if dashmotd_once_tty_ok "$DASHMOTD_ONCE_TTY"; then
+            printf '%s\n' "$DASHMOTD_ONCE_TTY"
+        fi
         return 0
     fi
     if [ -c /dev/tty ]; then
         tty_path=$(tty < /dev/tty 2>/dev/null || true)
-        case "$tty_path" in
-            /dev/*) printf '%s\n' "$tty_path"; return 0 ;;
-        esac
+        if dashmotd_once_tty_ok "$tty_path"; then
+            printf '%s\n' "$tty_path"
+            return 0
+        fi
     fi
     tty_path=$(tty 2>/dev/null || true)
-    case "$tty_path" in
-        /dev/*) printf '%s\n' "$tty_path" ;;
-    esac
+    if dashmotd_once_tty_ok "$tty_path"; then
+        printf '%s\n' "$tty_path"
+    fi
 }
 
 # dashmotd_once_sid — print kernel session id, or empty
@@ -88,7 +105,8 @@ dashmotd_once_should_display() {
 
     tty_path=$(dashmotd_once_tty)
     sid=$(dashmotd_once_sid)
-    # Without a tty/session key, fail open (show) — same as pre-guard behavior.
+    # Without a concrete tty/session key, fail open (show) — same as
+    # pre-guard behavior. Also covers pam_motd before a pts is attached.
     if [ -z "$tty_path" ] || [ -z "$sid" ]; then
         return 0
     fi
@@ -98,15 +116,26 @@ dashmotd_once_should_display() {
     chmod 1777 "$once_dir" 2>/dev/null || true
 
     key=$(printf '%s' "$tty_path" | tr -c 'A-Za-z0-9._-' '_')
-    stamp="$once_dir/$key"
-    if [ -r "$stamp" ]; then
-        prev=$(cat "$stamp" 2>/dev/null || true)
+    uid=$(id -u 2>/dev/null || printf '0')
+    # Per-uid stamp so a root-owned file under sticky /tmp cannot block a
+    # later user claim (and so the shell never prints Permission denied).
+    stamp="$once_dir/${uid}_${key}"
+    # Legacy shared stamp + other uids' stamps for the same tty: if any
+    # readable one already holds this session id, stay silent (pam as root
+    # then bashrc as the login user).
+    for candidate in "$stamp" "$once_dir/$key" "$once_dir/"*"_${key}"; do
+        # Unmatched globs stay literal; skip non-files.
+        [ -f "$candidate" ] || continue
+        [ -r "$candidate" ] || continue
+        prev=$(cat "$candidate" 2>/dev/null || true)
         if [ "$prev" = "$sid" ]; then
             return 1
         fi
-    fi
+    done
 
-    # Claim (best-effort). Failure to write still allows display.
-    printf '%s\n' "$sid" >"$stamp" 2>/dev/null || true
+    # Claim our uid-scoped stamp (best-effort). Redirect failures are
+    # shell-level; wrap so Permission denied never reaches the login tty.
+    # Failure to write still allows display.
+    { printf '%s\n' "$sid" >"$stamp"; } 2>/dev/null || true
     return 0
 }

@@ -740,7 +740,52 @@ if dashmotd_once_should_display && ! dashmotd_once_should_display; then
 else
     fail "dashmotd_once_should_display did not skip on second claim"
 fi
+# Bare /dev/tty is not a concrete pts — reject so we never share _dev_tty.
+export DASHMOTD_ONCE_TTY=/dev/tty
+once_tty_bare="$(dashmotd_once_tty)"
+if [[ -z "$once_tty_bare" ]]; then
+    pass "dashmotd_once_tty rejects bare /dev/tty"
+else
+    fail "dashmotd_once_tty accepted bare /dev/tty ($once_tty_bare)"
+fi
+# Fail open (show) with no concrete tty; must stay silent on stderr.
+export DASHMOTD_ONCE_SID=999001
+once_err="$(mktemp "${TMPDIR:-/tmp}/dashmotd-once-err.XXXXXX")"
+if dashmotd_once_should_display 2>"$once_err" && [[ ! -s "$once_err" ]]; then
+    pass "dashmotd_once_should_display fails open on /dev/tty without stderr"
+else
+    fail "dashmotd_once_should_display mishandled bare /dev/tty"
+fi
+rm -f "$once_err"
+# Foreign/legacy stamp for the same tty must not block a uid-scoped claim
+# or leak Permission denied (sticky /tmp cross-uid overwrite).
+export DASHMOTD_ONCE_TTY=/dev/pts/dashmotd-test
+export DASHMOTD_ONCE_SID=999002
+once_key="$(printf '%s' /dev/pts/dashmotd-test | tr -c 'A-Za-z0-9._-' '_')"
+printf 'other-sid\n' >"$ONCE_FIXTURE/$once_key"
+chmod 644 "$ONCE_FIXTURE/$once_key"
+once_err="$(mktemp "${TMPDIR:-/tmp}/dashmotd-once-err.XXXXXX")"
+if dashmotd_once_should_display 2>"$once_err" \
+    && [[ ! -s "$once_err" ]] \
+    && [[ -f "$ONCE_FIXTURE/$(id -u)_${once_key}" ]]
+then
+    pass "dashmotd_once_should_display claims uid stamp beside foreign stamp"
+else
+    fail "dashmotd_once_should_display failed quiet uid claim beside foreign stamp"
+fi
+rm -f "$once_err"
+# Matching sid on a legacy/foreign stamp still skips (pam root → user bashrc).
+export DASHMOTD_ONCE_SID=shared-sid
+printf 'shared-sid\n' >"$ONCE_FIXTURE/$once_key"
+rm -f "$ONCE_FIXTURE/$(id -u)_${once_key}"
+if ! dashmotd_once_should_display; then
+    pass "dashmotd_once_should_display skips when legacy stamp matches sid"
+else
+    fail "dashmotd_once_should_display ignored matching legacy stamp"
+fi
 unset DASHMOTD_SHOWN || true
+export DASHMOTD_ONCE_TTY=/dev/pts/dashmotd-test
+export DASHMOTD_ONCE_SID=424242
 export DASHMOTD_SHOWN=1
 if ! dashmotd_once_should_display; then
     pass "dashmotd_once_should_display skips when DASHMOTD_SHOWN is set"
