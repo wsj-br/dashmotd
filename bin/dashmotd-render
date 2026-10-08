@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-# pam_motd invokes us via env -i; ensure UTF-8 for °C and column layout.
+# Login hooks may inherit a sparse locale; ensure UTF-8 for °C and column layout.
 export LANG="${LANG:-C.UTF-8}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 
@@ -19,11 +19,21 @@ mkdir -p "$DASHMOTD_CACHE" 2>/dev/null || true
 
 # Auto hooks (profile.d / bashrc) set DASHMOTD_AUTO=1 so nested shells and
 # sudo elevation do not re-print after the first display on this tty/session.
-# pam_motd claims in 50-dashmotd before calling us; explicit CLI previews omit AUTO.
+# Login shells also set DASHMOTD_LOGIN=1 so the static /etc/motd backup is
+# shown immediately before the dashboard. Explicit CLI previews omit both.
 if [[ "${DASHMOTD_AUTO:-}" == "1" ]]; then
     # shellcheck source=/dev/null
     source "$ROOT/lib/once.sh"
     dashmotd_once_should_display || exit 0
+fi
+
+if [[ "${DASHMOTD_LOGIN:-}" == "1" ]]; then
+    static_marker="${DASHMOTD_STATIC_MARKER:-$ROOT/show-static-motd}"
+    static_motd="${DASHMOTD_STATIC_MOTD:-/etc/motd.dashmotd.bak}"
+    if [[ -e "$static_marker" ]] && [[ -s "$static_motd" ]]; then
+        cat "$static_motd"
+        printf '\n'
+    fi
 fi
 
 # shellcheck source=/dev/null

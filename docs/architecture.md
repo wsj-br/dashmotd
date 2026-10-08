@@ -10,7 +10,7 @@ Collect (hourly):
                                               └─ cache/sections/*
 
 Render (every login / interactive shell):
-  pam_motd / profile.d / system bashrc ──► bin/dashmotd-render
+  profile.d / system bashrc ──► bin/dashmotd-render
                                         │
                                         ├─ live: sysinfo, partitions, docker
                                         ├─ cache/sections/*  (collected cells)
@@ -20,39 +20,40 @@ Render (every login / interactive shell):
 
 - **Collect path** (hourly + 2 min after boot): systemd oneshot runs
   `dashmotd-collect` as root. It gathers only non-live LAYOUT cells (network,
-  disks, packages, certs, lastupdate) into `cache/sections/` and stamps
+  disks, packages, lastupdate) into `cache/sections/` and stamps
   `cache/last_update`. Live keys are skipped. Slow lookups (public IP,
-  packages, TLS expiry) may also keep their own files under `cache/`.
-- **Render path** (every display): `pam_motd` runs
-  `/etc/update-motd.d/50-dashmotd`, which optionally prints the backed-up
-  static `/etc/motd` text first, then calls `dashmotd-render`. The hook cannot
-  use `/dev/tty` to distinguish interactive SSH from non-interactive SSH:
-  Debian runs update-motd scripts before the session terminal is attached.
-  The installer blanks `/etc/motd` so pam does not repeat that text after the
-  dashboard. Elsewhere the installer drops `/etc/profile.d/zzz-dashmotd.sh`
-  (interactive login shells only). For **non-login interactive** shells
-  (tmux/byobu panes, `bash` subshells) the installer appends a single
-  marker-delimited hook to the system-wide bash rc file:
-  `/etc/bash.bashrc` (Debian/Ubuntu/Arch/SUSE) or `/etc/bashrc` (RHEL/Oracle
-  Linux/Fedora). That covers every user — present and future — without
-  editing personal `~/.bashrc` files. Install/update also remove any legacy
-  per-user hooks (`~/.bashrc.d/21-dashmotd.sh` or inlined marker blocks)
-  left by older releases. Render always samples `LIVE_SECTIONS` and reads
-  everything else from the collect cache.
+  packages) may also keep their own files under `cache/`.
+- **Render path** (every display): the system-wide bashrc hook
+  (`/etc/bash.bashrc` or `/etc/bashrc`) calls `dashmotd-render`. Login shells
+  set `DASHMOTD_LOGIN=1` so the backed-up static `/etc/motd` text is printed
+  immediately before the dashboard when `/opt/dashmotd/show-static-motd` is
+  present. Distros without `/etc/update-motd.d` also drop
+  `/etc/profile.d/zzz-dashmotd.sh` (interactive login shells only). The
+  installer blanks `/etc/motd` so pam does not print that text after the
+  dashboard. For **non-login interactive** shells (tmux/byobu panes, `bash`
+  subshells) the same bashrc hook renders once with `DASHMOTD_AUTO=1`. That
+  covers every user — present and future — without editing personal
+  `~/.bashrc` files. Install/update also remove any leftover
+  `/etc/update-motd.d/50-dashmotd` from older releases (the first
+  `update.sh` run is enough: the old updater recopies that file, then calls
+  `dashmotd_install_system_hook` from the new `lib/users.sh`, which deletes
+  both `/etc` and `/opt` copies). Legacy per-user hooks
+  (`~/.bashrc.d/21-dashmotd.sh` or inlined marker blocks) are stripped too.
+  Render always samples `LIVE_SECTIONS` and reads everything else from the
+  collect cache.
 
 ## System-wide bashrc hook
 
 ```bash
 # >>> dashmotd hook >>>
 # dashmotd — show dashboard once per interactive session
-# Login shells: pam_motd / profile.d already displayed; just mark SHOWN so
-# nested shells (chezmoi cd, bash) inherit the flag and skip.
-# Non-login shells: render at most once per tty/session (DASHMOTD_AUTO=1).
 if [[ $- == *i* ]]; then
-    if shopt -q login_shell; then
-        export DASHMOTD_SHOWN=1
-    elif [[ -z "${DASHMOTD_SHOWN:-}" ]] && [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
-        DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+    if [[ -z "${DASHMOTD_SHOWN:-}" ]] && [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
+        if shopt -q login_shell; then
+            DASHMOTD_LOGIN=1 DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+        else
+            DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+        fi
         export DASHMOTD_SHOWN=1
     fi
 fi
@@ -70,7 +71,7 @@ panes (new pts). Bypass with `DASHMOTD_FORCE=1` or a direct
 > the dashmotd block. On RHEL-family hosts bash does not read `/etc/bashrc`
 > itself; the stock `/etc/skel/.bashrc` sources it, so users who removed
 > that line from their own `~/.bashrc` will still see the dashboard at login
-> (via pam_motd / profile.d) but not in non-login shells.
+> (via profile.d) but not in non-login shells.
 
 
 # Test in development 

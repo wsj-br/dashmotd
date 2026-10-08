@@ -42,7 +42,7 @@ usage() {
 Usage: update.sh [options]
 
 Refresh an existing dashmotd installation. Keeps cache; replaces binaries,
-section scripts, systemd units, and MOTD hooks from upstream (or a local clone
+section scripts, systemd units, and bashrc hooks from upstream (or a local clone
 / tarball). When site config differs from packaged defaults, prompts apt-style
 (default: keep existing).
 
@@ -199,8 +199,11 @@ if [[ -d "$SRC/share/figlet" ]]; then
 fi
 # Replace section scripts; drop retired names from older releases.
 install -m 0755 "$SRC"/sections/* "$PREFIX/sections/"
-rm -f "$PREFIX/sections/last_execution.sh"
-install -m 0755 "$SRC/update-motd.d/50-dashmotd" "$PREFIX/update-motd.d/50-dashmotd"
+rm -f "$PREFIX/sections/last_execution.sh" \
+    "$PREFIX/sections/certificate_info.sh" \
+    "$PREFIX/cache/certs" \
+    "$PREFIX/cache/certs.out" \
+    "$PREFIX/cache/sections/certs"
 install -m 0644 "$SRC/systemd/dashmotd.service" "$PREFIX/systemd/dashmotd.service"
 install -m 0644 "$SRC/systemd/dashmotd.timer" "$PREFIX/systemd/dashmotd.timer"
 install -m 0755 "$SRC/install.sh" "$PREFIX/install.sh"
@@ -208,8 +211,6 @@ install -m 0755 "$SRC/uninstall.sh" "$PREFIX/uninstall.sh" 2>/dev/null || true
 install -m 0755 "$SRC/update.sh" "$PREFIX/update.sh"
 
 if [[ -d "$MOTD_DIR" ]]; then
-    log "updating $MOTD_DIR/50-dashmotd"
-    install -m 0755 "$PREFIX/update-motd.d/50-dashmotd" "$MOTD_DIR/50-dashmotd"
     if [[ -e /etc/profile.d/zzz-dashmotd.sh ]]; then
         log "removing stale /etc/profile.d/zzz-dashmotd.sh"
         rm -f /etc/profile.d/zzz-dashmotd.sh
@@ -218,6 +219,7 @@ elif [[ -d /etc/profile.d && -e /etc/profile.d/zzz-dashmotd.sh ]]; then
     log "refreshing /etc/profile.d/zzz-dashmotd.sh"
     cat > /etc/profile.d/zzz-dashmotd.sh <<'PROFILE'
 # dashmotd — render dashboard (live + collected cache) on interactive login shells
+# DASHMOTD_LOGIN=1: print static /etc/motd backup before the dashboard
 # DASHMOTD_AUTO=1: show at most once per tty/session (skip sudo -i / nested shells)
 case $- in
     *i*) ;;
@@ -227,7 +229,7 @@ if [ -n "${DASHMOTD_SHOWN:-}" ]; then
     return 0
 fi
 if [ -x /opt/dashmotd/bin/dashmotd-render ]; then
-    DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+    DASHMOTD_LOGIN=1 DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
     DASHMOTD_SHOWN=1
     export DASHMOTD_SHOWN
 fi

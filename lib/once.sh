@@ -5,7 +5,7 @@
 # reuse the same tty/session and are skipped. New tmux panes get a new pts
 # and still show the dashboard.
 #
-# Sourced by update-motd.d/50-dashmotd and bin/dashmotd-render.
+# Sourced by bin/dashmotd-render.
 # Override stamp dir with DASHMOTD_ONCE_DIR. Bypass with DASHMOTD_FORCE=1
 # or DASHMOTD_FORCE_TTY=1 (tests / manual previews).
 #

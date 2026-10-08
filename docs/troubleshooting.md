@@ -71,11 +71,11 @@ If vertical bars show gaps or unexpected characters:
 
 Sections fall into two execution categories:
 - **Live sections:** sampled instantly at every login (`sysinfo`, `partitions`, `docker`).
-- **Collected sections:** updated hourly by the `dashmotd.service` systemd timer (`disks`, `packages`, `certs`, `network`).
+- **Collected sections:** updated hourly by the `dashmotd.service` systemd timer (`disks`, `packages`, `network`).
 
 If a collected section is empty:
 1. **Privileges:** `smartctl` requires root privileges to query disk health. The hourly systemd service runs as root to generate these caches safely.
-2. **Missing utilities:** ensure required tools are installed (e.g., `smartmontools`, `openssl`, `curl`).
+2. **Missing utilities:** ensure required tools are installed (e.g., `smartmontools`, `curl`).
 3. **Manual cache refresh:** trigger a manual collect run to inspect errors:
    ```bash
    sudo systemctl start dashmotd.service
@@ -85,11 +85,12 @@ If a collected section is empty:
 
 ## Why is the dashboard rendered twice or not displaying in tmux / subshells?
 
-- **Double rendering:** if upgrading from older versions, check for leftover manual hooks in `~/.bashrc` or `~/.bashrc.d/21-dashmotd.sh`. `update.sh` automatically removes legacy per-user hooks in favor of the system-wide hook.
+- **Guacamole / SSH double display:** older releases printed from both `pam_motd` (`/etc/update-motd.d/50-dashmotd`) and the login-shell bashrc hook. One `sudo /opt/dashmotd/update.sh` run is enough: the first update deletes leftover `50-dashmotd` copies before it exits. A second update is not required.
+- **Double rendering:** if upgrading from older versions, also check for leftover manual hooks in `~/.bashrc` or `~/.bashrc.d/21-dashmotd.sh`. `update.sh` automatically removes legacy per-user hooks in favor of the system-wide hook.
 - **`sudo su -` / `chezmoi cd` / nested `bash`:** these should not show the dashboard again. Current releases mark the session (`DASHMOTD_SHOWN` + a per-uid/tty stamp in `/tmp/dashmotd-once`) and skip elevation via `su`. Update with `sudo /opt/dashmotd/update.sh` if you still see repeats.
 - **`/tmp/dashmotd-once/...: Permission denied`:** fixed in current `lib/once.sh` (uid-scoped stamps; bare `/dev/tty` is no longer used as a key). Clear stale stamps with `sudo rm -rf /tmp/dashmotd-once` and update.
 - **Subshell rendering:** `dashmotd` hooks into system-wide interactive shells (`/etc/bash.bashrc` on Debian/Ubuntu/Arch/SUSE, `/etc/bashrc` on RHEL/Fedora). Ensure your user `~/.bashrc` sources the system bashrc file if using customized shell configs. New tmux/byobu panes still get one display (new pts); nested shells in the same pane do not.
-- **No dashboard after a Debian upgrade:** Debian Trixie's PAM MOTD integration is unreliable (may have `noupdate` or fail to generate `/run/motd.dynamic`). Current releases render directly from the system bashrc hook for all interactive shells, bypassing PAM entirely. Update with `sudo /opt/dashmotd/update.sh` and clear stale once-guard stamps if needed: `sudo rm -rf /tmp/dashmotd-once`.
+- **No dashboard after a Debian upgrade:** Debian Trixie's PAM MOTD integration is unreliable (may have `noupdate` or fail to generate `/run/motd.dynamic`). Current releases render from the system bashrc hook for all interactive shells. Update with `sudo /opt/dashmotd/update.sh` and clear stale once-guard stamps if needed: `sudo rm -rf /tmp/dashmotd-once`.
 - **Force a preview:** `/opt/dashmotd/bin/dashmotd-render` or `DASHMOTD_FORCE=1 DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render`
 
 ## Disk health (`smartctl`) needs root

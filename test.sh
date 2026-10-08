@@ -256,7 +256,6 @@ expected_titles=(
     "partitions usage:"
     "disks health:"
     "packages:"
-    "certificates:"
     "containers:"
     "last update:"
 )
@@ -331,57 +330,50 @@ for script in "$ROOT"/sections/*.sh; do
     fi
 done
 
-# --- 9. update-motd entry (render path) --------------------------------------
-section "update-motd entry script"
+# --- 9. retired update-motd entry + login-shell preamble ---------------------
+section "retired update-motd entry and login-shell preamble"
 entry_out="$TEST_CACHE/entry.out"
 if env -i \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
-    DASHMOTD_CACHE="$TEST_CACHE" \
     "$ROOT/update-motd.d/50-dashmotd" >"$entry_out" 2>/dev/null \
-    && [[ -s "$entry_out" ]] \
-    && grep -Fq "system info:" "$entry_out"
+    && [[ ! -s "$entry_out" ]] \
+    && ! grep -Fq 'dashmotd-render' "$ROOT/update-motd.d/50-dashmotd"
 then
-    pass "50-dashmotd invokes dashmotd-render"
+    pass "50-dashmotd exits 0 with empty stdout and does not call dashmotd-render"
 else
-    fail "50-dashmotd did not render the dashboard"
+    fail "50-dashmotd still prints or invokes dashmotd-render"
 fi
 
-# Static MOTD preamble (requires /opt/dashmotd/show-static-motd marker)
 preamble_out="$TEST_CACHE/preamble.out"
 static_bak="$TEST_CACHE/static-motd.bak"
+static_marker="$TEST_CACHE/show-static-motd"
 printf 'STATIC PREAMBLE LINE\n' >"$static_bak"
-if [[ -e /opt/dashmotd/show-static-motd ]]; then
-    if env -i \
-        PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-        DASHMOTD_STATIC_MOTD="$static_bak" \
-        DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
-        DASHMOTD_CACHE="$TEST_CACHE" \
-        "$ROOT/update-motd.d/50-dashmotd" >"$preamble_out" 2>/dev/null \
-        && head -n1 "$preamble_out" | grep -Fq 'STATIC PREAMBLE LINE' \
-        && grep -Fq "system info:" "$preamble_out"
-    then
-        pass "50-dashmotd prints static MOTD before dashboard"
-    else
-        fail "50-dashmotd did not prepend static MOTD"
-    fi
+touch "$static_marker"
+if DASHMOTD_LOGIN=1 DASHMOTD_FORCE=1 \
+    DASHMOTD_STATIC_MARKER="$static_marker" \
+    DASHMOTD_STATIC_MOTD="$static_bak" \
+    DASHMOTD_CACHE="$TEST_CACHE" \
+    "$ROOT/bin/dashmotd-render" >"$preamble_out" 2>/dev/null \
+    && head -n1 "$preamble_out" | grep -Fq 'STATIC PREAMBLE LINE' \
+    && grep -Fq "system info:" "$preamble_out"
+then
+    pass "dashmotd-render prints static MOTD before dashboard when DASHMOTD_LOGIN=1"
 else
-    pass "50-dashmotd static preamble check skipped (no /opt/dashmotd/show-static-motd)"
+    fail "dashmotd-render did not prepend static MOTD when DASHMOTD_LOGIN=1"
 fi
 
-# pam_motd invokes update-motd scripts through env -i before an SSH tty is
-# attached. This must still render the dashboard.
-pam_out="$TEST_CACHE/pam-env.out"
-if env -i \
-    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    DASHMOTD_RENDER="$ROOT/bin/dashmotd-render" \
+nopreamble_out="$TEST_CACHE/nopreamble.out"
+if DASHMOTD_FORCE=1 \
+    DASHMOTD_STATIC_MARKER="$static_marker" \
+    DASHMOTD_STATIC_MOTD="$static_bak" \
     DASHMOTD_CACHE="$TEST_CACHE" \
-    "$ROOT/update-motd.d/50-dashmotd" >"$pam_out" 2>/dev/null \
-    && grep -Fq "system info:" "$pam_out"
+    "$ROOT/bin/dashmotd-render" >"$nopreamble_out" 2>/dev/null \
+    && ! grep -Fq 'STATIC PREAMBLE LINE' "$nopreamble_out" \
+    && grep -Fq "system info:" "$nopreamble_out"
 then
-    pass "50-dashmotd renders from pam_motd-style clean environment"
+    pass "dashmotd-render omits static MOTD without DASHMOTD_LOGIN"
 else
-    fail "50-dashmotd failed from pam_motd-style clean environment"
+    fail "dashmotd-render printed static MOTD without DASHMOTD_LOGIN"
 fi
 
 # --- 10. helpers -------------------------------------------------------------
@@ -445,11 +437,12 @@ else
     fail "poisoned network cache executed shell (sentinel created)"
 fi
 if grep -Fq '1.2.3.4' "$TEST_CACHE/poison-net.out" \
-    && grep -Fq '10.0.0.1' "$TEST_CACHE/poison-net.out"
+    && ! grep -Fq "touch $sentinel" "$TEST_CACHE/poison-net.out" \
+    && ! grep -Fq 'evil=' "$TEST_CACHE/poison-net.out"
 then
-    pass "poisoned network cache still yields validated IPs"
+    pass "poisoned network cache still yields the cached public IP"
 else
-    fail "poisoned network cache did not render validated IPs"
+    fail "poisoned network cache did not render the cached public IP"
 fi
 
 # Dual-stack public IP display form must pass validation (ipv6 / ipv4)
@@ -468,6 +461,50 @@ if grep -Fq '2a01:4b00:ab2e::1002 / 209.35.71.89' "$TEST_CACHE/dual-net.out"; th
     pass "dual-stack public ip display form is accepted from cache"
 else
     fail "dual-stack public ip display form rejected or mangled"
+fi
+
+# Every global IPv4 on the default-route interface, route source first.
+# Docker/bridge addresses on other interfaces stay out.
+section "private IPs on the default interface"
+ip_bin="$TEST_CACHE/ipbin"
+mkdir -p "$ip_bin"
+cat > "$ip_bin/ip" <<'EOF'
+#!/bin/sh
+case "$*" in
+    "route get 1.2.3.4")
+        printf '%s\n' "1.2.3.4 via 192.168.1.1 dev eno1 src 192.168.1.108 uid 1000"
+        ;;
+    "-4 -o addr show dev eno1 scope global")
+        printf '%s\n' "2: eno1    inet 192.168.1.51/22 brd 192.168.3.255 scope global noprefixroute eno1"
+        printf '%s\n' "2: eno1    inet 192.168.1.108/22 brd 192.168.3.255 scope global secondary dynamic noprefixroute eno1"
+        ;;
+    *)
+        printf 'unexpected ip args: %s\n' "$*" >&2
+        exit 1
+        ;;
+esac
+EOF
+chmod +x "$ip_bin/ip"
+priv_cache="$TEST_CACHE/priv"
+mkdir -p "$priv_cache"
+{
+    printf 'last_update=%s\n' "$today"
+    printf 'public_ip=203.0.113.8\n'
+    printf 'private_ip=192.168.1.108\n'
+} > "$priv_cache/network"
+set +e
+PATH="$ip_bin:$PATH" DASHMOTD_CACHE="$priv_cache" "$ROOT/sections/network_info.sh" \
+    >"$TEST_CACHE/priv-net.out" 2>"$TEST_CACHE/priv-net.err"
+priv_rc=$?
+set -e
+priv_plain="$(sed 's/\x1b\[[0-9;]*m//g' "$TEST_CACHE/priv-net.out")"
+if [[ "$priv_rc" -eq 0 ]] \
+    && grep -Fq '192.168.1.108 / 192.168.1.51' <<<"$priv_plain" \
+    && ! grep -Fq '172.18.0.1' <<<"$priv_plain"
+then
+    pass "default interface lists every private IPv4, source first"
+else
+    fail "private IP list mismatch (rc=$priv_rc out=$(tr '\n' ' ' <<<"$priv_plain"))"
 fi
 
 # http_get must honor family 4/6 so root collect (Happy Eyeballs often prefers
@@ -517,6 +554,19 @@ if [[ "$task_n" =~ ^[0-9]+$ ]]; then
     pass "system info task count is integer ($task_n)"
 else
     fail "system info task count not parseable as integer"
+fi
+
+plain_sys="$(sed 's/\x1b\[[0-9;]*m//g' "$sys_out")"
+users_n="$(printf '%s\n' "$plain_sys" | grep -oE '[0-9]+[[:space:]]+users' | head -n1 | awk '{print $1}')"
+if [[ "$users_n" =~ ^[0-9]+$ ]] \
+    && grep -Eq '[[:space:]]uptime[[:space:]]' <<<"$plain_sys" \
+    && grep -Eq '[[:space:]]1m[[:space:]]' <<<"$plain_sys" \
+    && grep -Eq '[[:space:]]5m($|[[:space:]])' <<<"$plain_sys" \
+    && ! grep -Fq 'load average:' <<<"$plain_sys"
+then
+    pass "system info uptime/users and 1m/5m load match the value/label grid"
+else
+    fail "system info uptime rows not in value/label form (users='$users_n')"
 fi
 
 # Unit-separator merge: @ in section text must not split columns
@@ -579,21 +629,29 @@ else
     pass "figlet not installed — skipped bundled mono9 check"
 fi
 
-# Partition awk/read path keeps mount targets containing spaces
+# Partition awk/read path keeps local disks and mount targets containing spaces
 section "partition mount points with spaces"
 df_stub="$TEST_CACHE/df-stub"
 # Mimic df -hT columns: Filesystem Type Size Used Avail Use% Mounted on
 cat > "$df_stub" <<'DF'
-Filesystem     Type  Size  Used Avail Use% Mounted on
-/dev/sda1      ext4  100G   50G   50G  50% /
-/dev/sdb1      ext4  200G  100G  100G  50% /mnt/My Drive
-tmpfs          tmpfs 1.0G     0  1.0G   0% /run
+Filesystem     Type     Size  Used Avail Use% Mounted on
+/dev/sda1      ext4     100G   50G   50G  50% /
+/dev/sdb1      ext4     200G  100G  100G  50% /mnt/My Drive
+/dev/nvme0n1p1 vfat     196M   42M  155M  21% /boot/efi
+efivarfs       efivarfs 128K   52K   72K  43% /sys/firmware/efi/efivars
+Cursor.AppImage fuse.Cursor 73M 73M 0 100% /tmp/.mount_Cursor
+/dev/loop0     squashfs  50M   50M     0 100% /snap/core
+tmpfs          tmpfs    1.0G     0  1.0G   0% /run
+tank/ROOT      zfs      100G   40G   60G  40% /tank
 DF
 part_parsed="$TEST_CACHE/part-parsed"
-awk -v filter="tmpfs|vfat|overlay|devtmpfs|squashfs" -v OFS='\t' '
+awk -v filter="overlay|squashfs" -v OFS='\t' '
     NR==1 { next }
-    $2 ~ ("^(" filter ")$") { next }
-    $1 ~ ("^(" filter ")$") { next }
+    $2 ~ /^fuse/ { next }
+    $1 ~ /^\/dev\/loop/ { next }
+    $1 !~ /^\/dev\// && $2 != "zfs" { next }
+    filter != "" && $2 ~ ("^(" filter ")$") { next }
+    filter != "" && $1 ~ ("^(" filter ")$") { next }
     {
         target = $7
         for (i = 8; i <= NF; i++) target = target " " $i
@@ -601,16 +659,27 @@ awk -v filter="tmpfs|vfat|overlay|devtmpfs|squashfs" -v OFS='\t' '
     }
 ' "$df_stub" | sort -t $'\t' -k6 > "$part_parsed"
 found_spaced=0
+found_efi=0
+found_zfs=0
+found_noise=0
 while IFS=$'\t' read -r _fstype size _used avail pcent target; do
-    if [[ "$target" == "/mnt/My Drive" ]]; then
-        found_spaced=1
-        break
-    fi
+    case "$target" in
+        "/mnt/My Drive") found_spaced=1 ;;
+        "/boot/efi") found_efi=1 ;;
+        "/tank") found_zfs=1 ;;
+        "/sys/firmware/efi/efivars"|"/tmp/.mount_Cursor"|"/snap/core"|"/run")
+            found_noise=1 ;;
+    esac
 done < "$part_parsed"
 if (( found_spaced )); then
     pass "partition parser preserves mount point with spaces"
 else
     fail "partition parser lost mount point with spaces"
+fi
+if (( found_efi && found_zfs && ! found_noise )); then
+    pass "partition parser keeps local disks and drops fuse/special/loops"
+else
+    fail "partition parser filter mismatch (efi=$found_efi zfs=$found_zfs noise=$found_noise)"
 fi
 
 # --- 11. users / bashrc hook helpers ----------------------------------------
@@ -623,6 +692,10 @@ source "$ROOT/lib/users.sh"
 
 USERS_FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/dashmotd-users.XXXXXX")"
 owner="$(id -un)"
+# Point leftover-printer removal at the fixture so tests never touch /etc.
+export DASHMOTD_MOTD_DIR="$USERS_FIXTURE/update-motd.d"
+export DASHMOTD_PREFIX="$USERS_FIXTURE/prefix"
+mkdir -p "$DASHMOTD_MOTD_DIR" "$DASHMOTD_PREFIX/update-motd.d"
 
 # System-wide hook: idempotent install into a temp rcfile
 sys_rc="$USERS_FIXTURE/bash.bashrc"
@@ -681,35 +754,53 @@ else
     fail "dashmotd_remove_user_hook left ~/.bashrc.d/21-dashmotd.sh"
 fi
 
-# Hook body: interactive shells render once with AUTO and mark SHOWN
+# First update from an old install recopies 50-dashmotd, then this hook
+# must delete both /etc and /opt copies before it returns.
+printf 'old-printer\n' >"$DASHMOTD_MOTD_DIR/50-dashmotd"
+printf 'old-printer\n' >"$DASHMOTD_PREFIX/update-motd.d/50-dashmotd"
+dashmotd_install_system_hook "$sys_rc" >/dev/null
+if [[ ! -e "$DASHMOTD_MOTD_DIR/50-dashmotd" ]] \
+    && [[ ! -e "$DASHMOTD_PREFIX/update-motd.d/50-dashmotd" ]]
+then
+    pass "dashmotd_install_system_hook removes leftover 50-dashmotd copies"
+else
+    fail "dashmotd_install_system_hook left leftover 50-dashmotd copies"
+fi
+
+# Hook body: login shells pass LOGIN+AUTO; other interactive shells pass AUTO
 hook_body="$(_dashmotd_hook_body)"
 if [[ "$hook_body" == *'$- == *i*'* ]] \
     && [[ "$hook_body" == *'DASHMOTD_SHOWN'* ]] \
-    && [[ "$hook_body" == *'DASHMOTD_AUTO=1'* ]]
+    && [[ "$hook_body" == *'shopt -q login_shell'* ]] \
+    && [[ "$hook_body" == *'DASHMOTD_LOGIN=1 DASHMOTD_AUTO=1'* ]] \
+    && [[ "$hook_body" == *'DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render'* ]]
 then
-    pass "hook body marks SHOWN and uses DASHMOTD_AUTO for interactive shells"
+    pass "hook body uses DASHMOTD_LOGIN on login shells and DASHMOTD_AUTO on both"
 else
-    fail "hook body missing SHOWN / AUTO / interactive guards"
+    fail "hook body missing LOGIN / AUTO / interactive guards"
 fi
 
-# profile.d snippet includes interactive + once guards
-if grep -Fq 'DASHMOTD_AUTO=1' "$ROOT/install.sh" \
+# profile.d snippet includes LOGIN + interactive + once guards
+if grep -Fq 'DASHMOTD_LOGIN=1 DASHMOTD_AUTO=1' "$ROOT/install.sh" \
+    && grep -Fq 'DASHMOTD_LOGIN=1 DASHMOTD_AUTO=1' "$ROOT/update.sh" \
     && grep -Fq 'DASHMOTD_SHOWN' "$ROOT/install.sh" \
     && grep -Fq 'case $- in' "$ROOT/install.sh"
 then
-    pass "profile.d template guards interactive shells and once-display"
+    pass "profile.d templates pass DASHMOTD_LOGIN and guard once-display"
 else
-    fail "profile.d template missing interactive / once-display guards"
+    fail "profile.d templates missing DASHMOTD_LOGIN / once-display guards"
 fi
 
-# 50-dashmotd must be usable from pam_motd's clean environment and retain
-# the once-guard. pam_motd runs this hook before an SSH tty is attached.
-if ! grep -Fq '/dev/tty' "$ROOT/update-motd.d/50-dashmotd" \
-    && grep -Fq 'once.sh' "$ROOT/update-motd.d/50-dashmotd"
+# New install/update must not recopy 50-dashmotd into /etc or /opt; they rely
+# on dashmotd_install_system_hook to delete leftovers.
+if grep -Fq 'dashmotd_install_system_hook' "$ROOT/install.sh" \
+    && grep -Fq 'dashmotd_install_system_hook' "$ROOT/update.sh" \
+    && ! grep -Eq 'install[[:space:]].*50-dashmotd' "$ROOT/install.sh" \
+    && ! grep -Eq 'install[[:space:]].*50-dashmotd' "$ROOT/update.sh"
 then
-    pass "50-dashmotd is PAM-compatible and has once-guard"
+    pass "install.sh and update.sh remove 50-dashmotd and do not reinstall it"
 else
-    fail "50-dashmotd still requires a controlling tty or lacks once-guard"
+    fail "install.sh or update.sh still install 50-dashmotd"
 fi
 
 # The once helper must not turn `tty`'s diagnostic text into a shared stamp.

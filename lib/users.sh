@@ -1,8 +1,9 @@
 # dashmotd bashrc-hook helpers — sourced by install.sh, update.sh, uninstall.sh.
 #
-# Non-login interactive shells get the dashboard via a system-wide hook in
-# /etc/bash.bashrc (Debian/Arch/SUSE) or /etc/bashrc (RHEL). Per-user
-# ~/.bashrc / ~/.bashrc.d hooks from older releases are removed on install/update.
+# Interactive shells get the dashboard via a system-wide hook in
+# /etc/bash.bashrc (Debian/Arch/SUSE) or /etc/bashrc (RHEL). Login shells
+# set DASHMOTD_LOGIN=1. Per-user ~/.bashrc / ~/.bashrc.d hooks from older
+# releases are removed on install/update.
 #
 # Copyright (c) 2026 Waldemar Scudeller Junior.  Licensed under MIT License
 
@@ -12,14 +13,18 @@ DASHMOTD_HOOK_END='# <<< dashmotd hook <<<'
 
 # Body of the interactive shell hook (no markers).
 # Renders the dashboard once per session for all interactive shells.
-# PAM MOTD integration is unreliable on Debian (pam_motd may have noupdate,
-# or /run/motd.dynamic generation may fail), so we render directly from bashrc.
+# Login shells set DASHMOTD_LOGIN=1 so dashmotd-render can print the static
+# /etc/motd backup immediately before the dashboard.
 _dashmotd_hook_body() {
     cat <<'HOOK'
 # dashmotd — show dashboard once per interactive session
 if [[ $- == *i* ]]; then
     if [[ -z "${DASHMOTD_SHOWN:-}" ]] && [[ -x /opt/dashmotd/bin/dashmotd-render ]]; then
-        DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+        if shopt -q login_shell; then
+            DASHMOTD_LOGIN=1 DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+        else
+            DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+        fi
         export DASHMOTD_SHOWN=1
     fi
 fi
@@ -59,10 +64,30 @@ dashmotd_system_rcfile() {
     return 1
 }
 
+# dashmotd_remove_update_motd_entry — delete leftover 50-dashmotd printers.
+# Called from dashmotd_install_system_hook so the first update from an old
+# updater (which recopies the file, then calls this from the new lib/users.sh)
+# removes both copies before it exits. DASHMOTD_MOTD_DIR / DASHMOTD_PREFIX
+# override paths for tests.
+dashmotd_remove_update_motd_entry() {
+    local motd_dir="${DASHMOTD_MOTD_DIR:-/etc/update-motd.d}"
+    local prefix="${DASHMOTD_PREFIX:-/opt/dashmotd}"
+    local f
+    for f in "$motd_dir/50-dashmotd" "$prefix/update-motd.d/50-dashmotd"; do
+        if [[ -e "$f" ]]; then
+            log "removing leftover $f"
+            rm -f "$f"
+        fi
+    done
+}
+
 # dashmotd_install_system_hook [FILE] — idempotent marker block in system rc
 # Optional FILE overrides detection (for tests).
 dashmotd_install_system_hook() {
     local rcfile="${1:-}"
+    # Always strip leftover PAM printers first (covers first update from an
+    # old updater that recopied 50-dashmotd, then called this function).
+    dashmotd_remove_update_motd_entry
     if [[ -z "$rcfile" ]]; then
         rcfile="$(dashmotd_system_rcfile)" || {
             warn "no system-wide bashrc found — non-login shells will not show the dashboard"

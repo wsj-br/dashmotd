@@ -5,23 +5,23 @@
 ## Prerequisites
 
 - A supported Linux distribution (see [Supported distributions](../README.md#supported-distributions))
-- Root privileges to install (the installer configures systemd and MOTD hooks)
+- Root privileges to install (the installer configures systemd and bashrc hooks)
 - `systemd` recommended (hourly collect timer); without it, run `dashmotd-collect` from cron
-- On Debian-family systems: `pam_motd` + `/etc/update-motd.d` (usual default). Elsewhere the installer falls back to `/etc/profile.d`
+- On Debian-family systems: `/etc/bash.bashrc` (sourced from `/etc/profile` for login shells). Elsewhere the installer also drops `/etc/profile.d/zzz-dashmotd.sh` when `/etc/update-motd.d` is absent
 
 **Required commands:** `bash`, `paste`, `free`, `awk`, `sed`, `grep`, `mktemp`
 
-**Recommended** (sections degrade gracefully if missing): `smartmontools` (`smartctl`), `openssl`, `curl` or `wget`, `figlet` (dashmotd bundles the `mono9` font), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
+**Recommended** (sections degrade gracefully if missing): `smartmontools` (`smartctl`), `curl` or `wget`, `figlet` (dashmotd bundles the `mono9` font), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
 
 ```bash
 # Debian / Ubuntu / Raspberry Pi / Zorin
-sudo apt-get install -y smartmontools openssl wget curl figlet
+sudo apt-get install -y smartmontools wget curl figlet
 
 # RHEL / Oracle Linux / Rocky / Alma / Fedora
-sudo dnf install -y smartmontools openssl wget curl figlet
+sudo dnf install -y smartmontools wget curl figlet
 
 # Arch / Manjaro
-sudo pacman -S --needed smartmontools openssl wget curl figlet pacman-contrib
+sudo pacman -S --needed smartmontools wget curl figlet pacman-contrib
 ```
 
 ## Quick install
@@ -31,8 +31,8 @@ curl -fsSL https://raw.githubusercontent.com/wsj-br/dashmotd/main/install.sh | s
 ```
 
 The installer is self-bootstrapping: when piped through `curl` it downloads
-the project tarball, installs into `/opt/dashmotd`, wires up systemd +
-`update-motd.d`, collects the first cache, and renders a preview. Pipe into
+the project tarball, installs into `/opt/dashmotd`, wires up systemd and the
+system bashrc hook, collects the first cache, and renders a preview. Pipe into
 `sudo bash` (root is required; a non-root pipe cannot re-exec itself).
 
 *(If running an update or install immediately after a GitHub commit, see
@@ -68,7 +68,8 @@ sudo ./update.sh
 
 Optional overrides: `DASHMOTD_REF=main`, `DASHMOTD_REPO=...`, `DASHMOTD_TARBALL=...`
 (same meaning as for `install.sh`). The updater replaces scripts, systemd units,
-and MOTD hooks, then runs collect + render.
+and bashrc hooks, then runs collect + render. One run also deletes leftover
+`/etc/update-motd.d/50-dashmotd` from older installs.
 
 If `/opt/dashmotd/config` differs from the packaged defaults, install and update
 prompt apt-style: keep your version (default), install the maintainer's version,
@@ -83,7 +84,9 @@ If you still have an old `PUBLIC_IP_URL`, set it to `https://api64.ipify.org/` s
 dual-stack hosts can resolve both families (`ipv6 / ipv4`). A leftover
 `PUBLIC_IP_V4_URL` line in site config is ignored. `COLUMNS` was renamed to
 `GRID_COLUMNS`; an old `COLUMNS=2` line is ignored and the grid falls back to
-2 columns.
+2 columns. A leftover `certs` cell or `CERT_TARGETS` line is unused after
+`certificate_info.sh` is removed; delete them from a kept site config so the
+grid has no empty slot.
 
 ### Options
 
@@ -104,7 +107,7 @@ sudo /opt/dashmotd/uninstall.sh
 sudo ./uninstall.sh
 ```
 
-This removes the systemd units, the `update-motd.d` entry, the
+This removes the systemd units, a leftover `update-motd.d` entry if present, the
 `/etc/profile.d` snippet (if present), the system-wide bashrc hook from
 `/etc/bash.bashrc` or `/etc/bashrc`, any legacy per-user hooks
 (`~/.bashrc.d/21-dashmotd.sh` or inlined marker blocks in `~/.bashrc`), and

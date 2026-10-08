@@ -18,7 +18,7 @@ PREFIX="/opt/dashmotd"
 UNIT_DIR="/etc/systemd/system"
 MOTD_DIR="/etc/update-motd.d"
 # Default: backup /etc/motd, blank it (pam would otherwise print it after
-# the dynamic MOTD), and show the backup before the dashboard via 50-dashmotd.
+# the dashboard), and show the backup before the dashboard on login shells.
 SHOW_STATIC=1
 
 # Default repo for curl|bash bootstrap (must match the published GitHub repo).
@@ -149,7 +149,7 @@ for c in bash paste free awk sed grep mktemp; do
 done
 # Recommended (sections degrade gracefully without them)
 optional_missing=()
-for c in smartctl openssl figlet; do
+for c in smartctl figlet; do
     need_cmd "$c" || optional_missing+=("$c")
 done
 # Need at least one HTTP client
@@ -177,16 +177,16 @@ if (( ${#optional_missing[@]} > 0 )); then
     warn "optional tools missing (sections will degrade): ${optional_missing[*]}"
     case "$DASHMOTD_PKG_MANAGER" in
         apt)
-            warn "hint: apt-get install -y smartmontools openssl wget curl figlet"
+            warn "hint: apt-get install -y smartmontools wget curl figlet"
             ;;
         dnf|yum)
-            warn "hint: ${DASHMOTD_PKG_MANAGER} install -y smartmontools openssl wget curl figlet"
+            warn "hint: ${DASHMOTD_PKG_MANAGER} install -y smartmontools wget curl figlet"
             ;;
         pacman)
-            warn "hint: pacman -S --needed smartmontools openssl wget curl figlet pacman-contrib"
+            warn "hint: pacman -S --needed smartmontools wget curl figlet pacman-contrib"
             ;;
         zypper)
-            warn "hint: zypper install -y smartmontools openssl wget curl figlet"
+            warn "hint: zypper install -y smartmontools wget curl figlet"
             ;;
     esac
 fi
@@ -211,7 +211,6 @@ if [[ -d "$SRC/share/figlet" ]]; then
     install -m 0644 "$SRC"/share/figlet/* "$PREFIX/share/figlet/"
 fi
 install -m 0755 "$SRC"/sections/* "$PREFIX/sections/"
-install -m 0755 "$SRC/update-motd.d/50-dashmotd" "$PREFIX/update-motd.d/50-dashmotd"
 install -m 0644 "$SRC/systemd/dashmotd.service" "$PREFIX/systemd/dashmotd.service"
 install -m 0644 "$SRC/systemd/dashmotd.timer" "$PREFIX/systemd/dashmotd.timer"
 install -m 0755 "$SRC/install.sh" "$PREFIX/install.sh"
@@ -219,23 +218,18 @@ install -m 0755 "$SRC/uninstall.sh" "$PREFIX/uninstall.sh" 2>/dev/null || true
 install -m 0755 "$SRC/update.sh" "$PREFIX/update.sh" 2>/dev/null || true
 
 # --- display path (distro-aware) ---------------------------------------------
-# Debian/Ubuntu/Raspberry Pi: /etc/update-motd.d + pam_motd. The hook must
-# work without /dev/tty because pam_motd runs it before the SSH tty is attached.
-# RHEL/Oracle/Arch/others without update-motd.d: /etc/profile.d
-# Non-login interactive shells: system-wide /etc/bash.bashrc or /etc/bashrc
+# Interactive shells: system-wide /etc/bash.bashrc or /etc/bashrc.
+# Debian-family: still disable 10-uname (kernel is in the dashboard) and skip
+# profile.d — /etc/profile already sources the bashrc hook. Distros without
+# update-motd.d get /etc/profile.d/zzz-dashmotd.sh for login shells.
 USED_UPDATE_MOTD=0
-USED_PROFILE_D=0
 
 if [[ -d "$MOTD_DIR" ]]; then
-    log "installing $MOTD_DIR/50-dashmotd (update-motd)"
-    install -m 0755 "$PREFIX/update-motd.d/50-dashmotd" "$MOTD_DIR/50-dashmotd"
     USED_UPDATE_MOTD=1
     if [[ -x "$MOTD_DIR/10-uname" ]]; then
         log "disabling $MOTD_DIR/10-uname (kernel shown in dashboard)"
         chmod -x "$MOTD_DIR/10-uname"
     fi
-else
-    warn "$MOTD_DIR not present — skipping update-motd integration"
 fi
 
 # Remove a dashmotd-owned fallback left by an older install. Keeping both
@@ -250,6 +244,7 @@ if (( ! USED_UPDATE_MOTD )) && [[ -d /etc/profile.d ]]; then
     log "installing /etc/profile.d/zzz-dashmotd.sh (login shells)"
     cat > /etc/profile.d/zzz-dashmotd.sh <<'PROFILE'
 # dashmotd — render dashboard (live + collected cache) on interactive login shells
+# DASHMOTD_LOGIN=1: print static /etc/motd backup before the dashboard
 # DASHMOTD_AUTO=1: show at most once per tty/session (skip sudo -i / nested shells)
 case $- in
     *i*) ;;
@@ -259,13 +254,12 @@ if [ -n "${DASHMOTD_SHOWN:-}" ]; then
     return 0
 fi
 if [ -x /opt/dashmotd/bin/dashmotd-render ]; then
-    DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
+    DASHMOTD_LOGIN=1 DASHMOTD_AUTO=1 /opt/dashmotd/bin/dashmotd-render
     DASHMOTD_SHOWN=1
     export DASHMOTD_SHOWN
 fi
 PROFILE
     chmod 0644 /etc/profile.d/zzz-dashmotd.sh
-    USED_PROFILE_D=1
 fi
 
 # PAM sanity check (informative)
@@ -314,7 +308,7 @@ if [[ -s /etc/motd ]]; then
         log "backing up /etc/motd -> /etc/motd.dashmotd.bak"
         cp -a /etc/motd /etc/motd.dashmotd.bak
     fi
-    log "blanking /etc/motd (shown before dashboard via 50-dashmotd when enabled)"
+    log "blanking /etc/motd (shown before dashboard on login shells when enabled)"
     : > /etc/motd
 elif [[ ! -e /etc/motd.dashmotd.bak ]]; then
     # Ensure the file exists so pam_motd has a harmless empty static MOTD
@@ -328,9 +322,5 @@ else
     rm -f "$PREFIX/show-static-motd"
 fi
 
-if (( USED_UPDATE_MOTD )) && command -v run-parts >/dev/null 2>&1; then
-    log "done. Preview with: run-parts /etc/update-motd.d/"
-else
-    log "done. Preview with: /opt/dashmotd/bin/dashmotd-render"
-fi
+log "done. Preview with: /opt/dashmotd/bin/dashmotd-render"
 log "Timer status: systemctl list-timers dashmotd.timer"

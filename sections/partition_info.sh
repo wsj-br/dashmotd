@@ -17,8 +17,13 @@ while IFS=$'\t' read -r _fstype size _used avail pcent target; do
     out+="${pct_disp}|${target_disp}|${avail} free of ${size}"$'\n'
 done < <(df -hT 2>/dev/null | awk -v filter="$PARTITION_FILTER" -v OFS='\t' '
     NR==1 { next }
-    $2 ~ ("^(" filter ")$") { next }
-    $1 ~ ("^(" filter ")$") { next }
+    # Local disk partitions only: block devices (and zfs datasets).
+    # Skip FUSE, loop mounts, network, and special/pseudo filesystems.
+    $2 ~ /^fuse/ { next }
+    $1 ~ /^\/dev\/loop/ { next }
+    $1 !~ /^\/dev\// && $2 != "zfs" { next }
+    filter != "" && $2 ~ ("^(" filter ")$") { next }
+    filter != "" && $1 ~ ("^(" filter ")$") { next }
     {
         target = $7
         for (i = 8; i <= NF; i++) target = target " " $i

@@ -9,8 +9,8 @@ GRID_COLUMNS=2
 LAYOUT="
 sysinfo    | network
 partitions | disks
-packages   | certs
-docker     | lastupdate
+packages   | lastupdate
+docker     |
 "
 
 # Map layout cell names to scripts under sections/
@@ -19,7 +19,6 @@ network="network_info.sh"
 partitions="partition_info.sh"
 disks="disk_info.sh"
 packages="packages_info.sh"
-certs="certificate_info.sh"
 docker="docker_info.sh"
 lastupdate="last_update.sh"
 
@@ -32,11 +31,12 @@ MEM_WARN=50
 CPU_WARN=20
 TEMP_WARN=60
 DISK_WARN=80
-CERT_TARGETS="example.com:443"
 DOCKER_FILTER="watchtower-runnow"
 ```
 
 To add a section: drop a script in `sections/`, map it in the sections block, and put its key in `LAYOUT`. Put the key in `LIVE_SECTIONS` if it should be sampled at every login; otherwise the collector will cache it. To swap an implementation, change only the mapped filename.
+
+If you kept a site config from before certificates were removed, delete the `certs` cell (and any `CERT_TARGETS` line) from `/opt/dashmotd/config` so the grid does not leave an empty slot.
 
 After editing collected sections, re-collect:
 
@@ -53,13 +53,14 @@ sudo /opt/dashmotd/bin/dashmotd-banner
 ## Managing static /etc/motd (legal / admin text)
 
 On install, the previous `/etc/motd` is moved aside so pam does not print it
-*after* the dashboard. The backup is shown *before* dashmotd instead.
+*after* the dashboard. On login shells the backup is shown *before* the
+dashboard when the marker file is present.
 
 | Path | Role |
 |---|---|
 | `/etc/motd.dashmotd.bak` | Backup of the original static MOTD |
 | `/etc/motd` | Left empty (pam static MOTD) |
-| `/opt/dashmotd/show-static-motd` | Marker: when present, `50-dashmotd` prints the backup first |
+| `/opt/dashmotd/show-static-motd` | Marker: when present, a login-shell render prints the backup first |
 
 **Edit** the text shown before the dashboard:
 

@@ -9,8 +9,8 @@ GRID_COLUMNS=2
 LAYOUT="
 sysinfo    | network
 partitions | disks
-packages   | certs
-docker     | lastupdate
+packages   | lastupdate
+docker     |
 "
 
 # --- sections ----------------------------------------------------------------
@@ -20,7 +20,6 @@ network="network_info.sh"
 partitions="partition_info.sh"
 disks="disk_info.sh"
 packages="packages_info.sh"
-certs="certificate_info.sh"
 docker="docker_info.sh"
 lastupdate="last_update.sh"
 
@@ -44,8 +43,10 @@ LOADCYCLE_WARN=10  # thousands of cycles
 PUBLIC_IP_URL="https://api64.ipify.org/"
 
 # --- partitions -------------------------------------------------------------
-# Pipe-separated filesystem types / targets to exclude from df listing
-PARTITION_FILTER="tmpfs|vfat|overlay|devtmpfs|squashfs"
+# Local disk partitions only (block devices under /dev, plus zfs).
+# FUSE, loop mounts, network, and special/pseudo filesystems are omitted.
+# Pipe-separated types or device names to hide in addition to that.
+PARTITION_FILTER="overlay|squashfs"
 
 # --- disks ------------------------------------------------------------------
 # Pipe-separated disk name patterns to exclude (e.g. mmcblk|loop)
@@ -56,10 +57,6 @@ DISK_FILTER="mmcblk|loop|sr"
 PKG_CACHE_HOURS=1
 # Package manager: auto | apt | dnf | yum | pacman | zypper
 PKG_MANAGER=auto
-
-# --- certificates -----------------------------------------------------------
-# Space-separated host:port pairs to check (default port 443 if omitted)
-CERT_TARGETS="example.com:443"
 
 # --- docker -----------------------------------------------------------------
 # Pipe-separated container name patterns to exclude

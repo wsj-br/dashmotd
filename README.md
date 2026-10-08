@@ -14,7 +14,7 @@ reflect current status.
 - Two-column auto-sized grid of system status cells
 - Live sections (sysinfo, partitions, docker) sampled at every login; others cached by collect
 - Works across Debian, RHEL, Arch, and SUSE families
-- Optional tools (`smartctl`, `openssl`, `figlet`, `docker`, …) degrade gracefully when missing
+- Optional tools (`smartctl`, `figlet`, `docker`, …) degrade gracefully when missing
 
 ## Prerequisites
 
@@ -25,17 +25,17 @@ reflect current status.
 
 **Required commands:** `bash`, `paste`, `free`, `awk`, `sed`, `grep`, `mktemp`
 
-**Recommended** (sections degrade gracefully if missing): `smartmontools` (`smartctl`), `openssl`, `curl` or `wget`, `figlet` (dashmotd bundles the `mono9` font), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
+**Recommended** (sections degrade gracefully if missing): `smartmontools` (`smartctl`), `curl` or `wget`, `figlet` (dashmotd bundles the `mono9` font), `docker`; on Arch also `pacman-contrib` (`checkupdates`)
 
 ```bash
 # Debian / Ubuntu / Raspberry Pi / Zorin
-sudo apt-get install -y smartmontools openssl wget curl figlet
+sudo apt-get install -y smartmontools wget curl figlet
 
 # RHEL / Oracle Linux / Rocky / Alma / Fedora
-sudo dnf install -y smartmontools openssl wget curl figlet
+sudo dnf install -y smartmontools wget curl figlet
 
 # Arch / Manjaro
-sudo pacman -S --needed smartmontools openssl wget curl figlet pacman-contrib
+sudo pacman -S --needed smartmontools wget curl figlet pacman-contrib
 ```
 
 
@@ -84,12 +84,11 @@ sudo /opt/dashmotd/bin/dashmotd-collect
 
 | Layout key | Script | When | Contents |
 |---|---|---|---|
-| `sysinfo` | `system_info.sh` | live | Kernel, tasks, CPU %, load, memory %, temperature |
-| `network` | `network_info.sh` | collect | Public IP (IPv6 + IPv4 when dual-stack; daily cache) and private IP |
-| `partitions` | `partition_info.sh` | live | Usage % plus free/total from `df -h` (e.g. `66%  /  304G free of 917G`) |
+| `sysinfo` | `system_info.sh` | live | Kernel, tasks, CPU %, 15-min load, memory %, temperature, uptime, users, 1m/5m load |
+| `network` | `network_info.sh` | collect | Public IP (IPv6 + IPv4 when dual-stack; daily cache) and every private IPv4 on the default-route interface |
+| `partitions` | `partition_info.sh` | live | Local disk usage from `df -h` (e.g. `66%  /  304G free of 917G`); FUSE and special filesystems are omitted |
 | `disks` | `disk_info.sh` | collect | SMART power-on / temp / cycles / spare (`smartctl`) |
 | `packages` | `packages_info.sh` | collect | Upgradable count via apt/dnf/yum/pacman/zypper + reboot flag |
-| `certs` | `certificate_info.sh` | collect | TLS certificate expiry via `openssl` |
 | `docker` | `docker_info.sh` | live | Container names and running/stopped marks |
 | `lastupdate` | `last_update.sh` | collect | When `dashmotd-collect` last refreshed cached data |
 
