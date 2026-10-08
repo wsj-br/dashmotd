@@ -129,7 +129,7 @@ fi
 [[ "$s_pkgs" =~ ^[0-9]+$ ]] || s_pkgs=0
 
 if (( t_pkgs > 0 )); then
-    t_disp="${bred}${t_pkgs}${reset}"
+    t_disp="${byellow}${t_pkgs}${reset}"
     s_disp="${bred}${s_pkgs}${reset}"
     if (( s_pkgs > 0 )); then
         msg="${t_disp} available (${s_disp} security)"
